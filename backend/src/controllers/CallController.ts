@@ -1,11 +1,24 @@
 import { Request, Response } from 'express';
 import CallService from '../services/CallService';
+import { normalizeIdempotencyKey } from '../utils/idempotency';
 
 class CallController {
   async createCall(req: Request, res: Response) {
-    const { tenantId, ...data } = req.body;
-    const call = await CallService.createCall(data, tenantId);
-    res.json(call);
+    try {
+      const { tenantId, idempotencyKey: bodyIdempotencyKey, ...data } = req.body;
+      const tenantIdNum = Number(tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+
+      const idempotencyKey = normalizeIdempotencyKey(
+        req.header('Idempotency-Key') || bodyIdempotencyKey,
+      );
+      const call = await CallService.createCall({ ...data, idempotencyKey }, tenantIdNum);
+      res.json(call);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Requisição inválida' });
+    }
   }
 
   async getCallById(req: Request, res: Response) {
@@ -46,9 +59,9 @@ class CallController {
       const result = await CallService.executeTestCall(Number(id), Number(tenantId));
       res.json(result);
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      res.status(409).json({ error: (err as Error).message });
     }
   }
 }
 
-export default new CallController(); 
+export default new CallController();
