@@ -49,7 +49,9 @@ router.get('/call-logs', handleAsync(CallLogController.listCallLogs));
 // WavoipToken routes
 router.post('/wavoip-tokens', handleAsync(WavoipTokenController.createWavoipToken));
 router.get('/wavoip-tokens/tenant/:tenantId', handleAsync(WavoipTokenController.listWavoipTokensByTenant));
-router.get('/wavoip-tokens/:token/check-availability', handleAsync(WavoipTokenController.checkDeviceAvailability));
+router.get('/wavoip-tokens/:id/availability', handleAsync(WavoipTokenController.checkDeviceAvailabilityById));
+// Legacy token-in-path route: disabled by default, kept only for controlled migration.
+router.get('/wavoip-tokens/:token/check-availability', handleAsync(WavoipTokenController.checkDeviceAvailabilityLegacy));
 router.get('/wavoip-tokens/:id', handleAsync(WavoipTokenController.getWavoipTokenById));
 router.put('/wavoip-tokens/:id', handleAsync(WavoipTokenController.updateWavoipToken));
 router.delete('/wavoip-tokens/:id', handleAsync(WavoipTokenController.deleteWavoipToken));
@@ -74,19 +76,19 @@ router.get('/elevenlab-tokens/:id/agents', handleAsync(ElevenLabTokenController.
 router.get('/elevenlab-tokens/:id/phone-numbers', handleAsync(ElevenLabTokenController.listPhoneNumbers));
 router.post('/elevenlab-tokens/:id/outbound-call', handleAsync(ElevenLabTokenController.makeOutboundCall));
 
-// Settings routes - Rotas específicas primeiro
+// Settings routes
 router.post('/settings', handleAsync(SettingsController.createSetting));
 router.get('/settings', handleAsync(SettingsController.listSettings));
 router.get('/settings/tenant/all', handleAsync(SettingsController.getAllSettingsByTenant));
 router.get('/settings/type/:type', handleAsync(SettingsController.getSettingByType));
 router.put('/settings/type/:type', handleAsync(SettingsController.updateSettingByType));
 router.delete('/settings/type/:type', handleAsync(SettingsController.deleteSettingByType));
-// Rotas com parâmetros dinâmicos por último
 router.get('/settings/:id', handleAsync(SettingsController.getSettingById));
 router.put('/settings/:id', handleAsync(SettingsController.updateSetting));
 router.delete('/settings/:id', handleAsync(SettingsController.deleteSetting));
 
-// Curl Executor routes
+// Generic HTTP executor is disabled by default and only works with explicit
+// allowlists when ENABLE_CURL_EXECUTOR=true.
 router.post('/curl-executor', handleAsync(CurlExecutorController.executeCurl));
 
 // Auth routes
