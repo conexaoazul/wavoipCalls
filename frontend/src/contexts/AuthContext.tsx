@@ -33,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (response.data.valid) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setIsAuthenticated(true);
         return true;
       } else {
