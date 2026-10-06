@@ -2,9 +2,34 @@ import Call from '../models/Call';
 import CallSchedulerService from './CallSchedulerService';
 
 class CallService {
-
   async createCall(data: any, tenantId: number) {
-    return Call.create({ ...data, tenantId });
+    const idempotencyKey = String(data.idempotencyKey || '');
+    if (!idempotencyKey) throw new Error('idempotencyKey é obrigatória');
+
+    const existing = await Call.findOne({ where: { tenantId, idempotencyKey } });
+    if (existing) return existing;
+
+    const safeData = { ...data };
+    delete safeData.executed;
+    delete safeData.dispatchState;
+    delete safeData.dispatchStartedAt;
+    delete safeData.providerCallId;
+    delete safeData.conversationId;
+    delete safeData.sipCallId;
+
+    try {
+      return await Call.create({
+        ...safeData,
+        tenantId,
+        dispatchState: 'pending',
+        executed: false,
+      });
+    } catch (error) {
+      // Handles a concurrent duplicate create racing on the unique index.
+      const raced = await Call.findOne({ where: { tenantId, idempotencyKey } });
+      if (raced) return raced;
+      throw error;
+    }
   }
 
   async getCallById(id: number, tenantId: number) {
@@ -12,7 +37,20 @@ class CallService {
   }
 
   async updateCall(id: number, data: any, tenantId: number) {
-    return Call.update(data, { where: { id, tenantId } });
+    const safeData = { ...data };
+    for (const protectedField of [
+      'idempotencyKey',
+      'executed',
+      'dispatchState',
+      'dispatchStartedAt',
+      'providerCallId',
+      'conversationId',
+      'sipCallId',
+      'tenantId',
+    ]) {
+      delete safeData[protectedField];
+    }
+    return Call.update(safeData, { where: { id, tenantId } });
   }
 
   async deleteCall(id: number, tenantId: number) {
@@ -43,4 +81,4 @@ class CallService {
   }
 }
 
-export default new CallService(); 
+export default new CallService();
