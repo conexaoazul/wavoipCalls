@@ -42,7 +42,7 @@ class CallSchedulerService {
   }
 
   private async findPendingCalls(tenantId?: number) {
-    const where: Record<string, unknown> = {
+    const where: any = {
       scheduleAt: { [Op.lte]: new Date() },
       executed: false,
       dispatchState: 'pending',
