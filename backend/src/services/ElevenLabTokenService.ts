@@ -1,5 +1,6 @@
 import ElevenLabToken from '../models/ElevenLabToken';
 import axios from 'axios';
+import ElevenLabsVoiceProvider from './providers/ElevenLabsVoiceProvider';
 
 class ElevenLabTokenService {
   async createElevenLabToken(data: any, tenantId: number) {
@@ -21,6 +22,7 @@ class ElevenLabTokenService {
 
   async listAgents(elevenLabToken: string) {
     const response = await axios.get('https://api.elevenlabs.io/v1/convai/agents', {
+      timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
       headers: {
         'xi-api-key': elevenLabToken,
       },
@@ -31,6 +33,7 @@ class ElevenLabTokenService {
 
   async listPhoneNumbers(elevenLabToken: string) {
     const response = await axios.get('https://api.elevenlabs.io/v1/convai/phone-numbers', {
+      timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
       headers: {
         'xi-api-key': elevenLabToken,
       },
@@ -39,20 +42,24 @@ class ElevenLabTokenService {
     return response.data;
   }
 
-  async makeOutboundCall(elevenLabToken: string, agentId: string, agentPhoneNumberId: string, toNumber: string, conversationInitiationClientData?: any) {
-    const response = await axios.post('https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call', {
-      agent_id: agentId,
-      agent_phone_number_id: agentPhoneNumberId,
-      to_number: toNumber,
-      conversation_initiation_client_data: conversationInitiationClientData,
-    }, {
-      headers: {
-        'xi-api-key': elevenLabToken,
-        'Content-Type': 'application/json',
-      },
+  async makeOutboundCall(
+    elevenLabToken: string,
+    agentId: string,
+    agentPhoneNumberId: string,
+    toNumber: string,
+    conversationInitiationClientData?: any,
+    correlationId?: string,
+  ) {
+    const result = await ElevenLabsVoiceProvider.startCall({
+      credential: elevenLabToken,
+      agentId,
+      phoneNumberId: agentPhoneNumberId,
+      toNumber,
+      conversationInitiationClientData,
+      correlationId,
     });
 
-    return response.data;
+    return result.raw;
   }
 
   async getAllElevenLabTokens() {
