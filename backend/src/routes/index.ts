@@ -10,6 +10,7 @@ import SettingsController from '../controllers/SettingsController';
 import AuthController from '../controllers/AuthController';
 import CurlExecutorController from '../controllers/CurlExecutorController';
 import dotenv from 'dotenv';
+import requireApiToken from '../middleware/requireApiToken';
 
 dotenv.config();
 
@@ -18,6 +19,10 @@ const router = Router();
 const handleAsync = (fn: Function) => (req: any, res: any, next: any) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
+
+// Public authentication probe. All control-plane routes below require Bearer auth.
+router.get('/auth/validate-token', AuthController.validateToken);
+router.use(requireApiToken);
 
 // User routes
 router.post('/users', UserController.createUser);
@@ -90,8 +95,5 @@ router.delete('/settings/:id', handleAsync(SettingsController.deleteSetting));
 // Generic HTTP executor is disabled by default and only works with explicit
 // allowlists when ENABLE_CURL_EXECUTOR=true.
 router.post('/curl-executor', handleAsync(CurlExecutorController.executeCurl));
-
-// Auth routes
-router.get('/auth/validate-token', AuthController.validateToken);
 
 export default router;
