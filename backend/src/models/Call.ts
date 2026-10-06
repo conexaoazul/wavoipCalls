@@ -30,6 +30,43 @@ class Call extends Model {
   })
   phoneNumberId!: string;
 
+  @Column({
+    type: DataType.STRING(128),
+    allowNull: true,
+  })
+  idempotencyKey?: string;
+
+  @Column({
+    type: DataType.STRING(16),
+    allowNull: false,
+    defaultValue: 'pending',
+  })
+  dispatchState!: 'pending' | 'dispatching' | 'completed' | 'failed' | 'unknown';
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  dispatchStartedAt?: Date;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  providerCallId?: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  conversationId?: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  sipCallId?: string;
+
   @ForeignKey(() => VapiToken)
   @Column({
     type: DataType.INTEGER,
@@ -88,4 +125,4 @@ class Call extends Model {
   tenant!: Tenant;
 }
 
-export default Call; 
+export default Call;
