@@ -126,3 +126,14 @@ test('read-only preflight is separately gated from dispatch', () => {
   assert.equal(scheduler.includes("VOICE_PREFLIGHT_ENABLED === 'true'"), true);
   assert.equal(scheduler.includes('networkDispatchPerformed: false'), true);
 });
+
+
+test('request bodies are bounded and readiness is database-backed', () => {
+  const app = source('app.ts');
+  const server = source('server.ts');
+  const db = source('database/index.ts');
+  assert.equal(app.includes('REQUEST_BODY_LIMIT || "1mb"'), true);
+  assert.equal(app.includes("/health/ready"), true);
+  assert.equal(server.includes('await initializeDatabase()'), true);
+  assert.equal(db.includes('databaseReady = true'), true);
+});
