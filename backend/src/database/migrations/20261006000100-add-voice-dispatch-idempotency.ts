@@ -5,7 +5,11 @@ export async function up(queryInterface: QueryInterface) {
     type: DataTypes.STRING(128),
     allowNull: true,
   });
-  await queryInterface.addColumn('Calls', 'dispatchState', {
+  await queryInterface.addColumn('Calls', 'requestFingerprint', {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+  });
+    await queryInterface.addColumn('Calls', 'dispatchState', {
     type: DataTypes.STRING(16),
     allowNull: false,
     defaultValue: 'pending',
@@ -44,5 +48,6 @@ export async function down(queryInterface: QueryInterface) {
   await queryInterface.removeColumn('Calls', 'providerCallId');
   await queryInterface.removeColumn('Calls', 'dispatchStartedAt');
   await queryInterface.removeColumn('Calls', 'dispatchState');
+  await queryInterface.removeColumn('Calls', 'requestFingerprint');
   await queryInterface.removeColumn('Calls', 'idempotencyKey');
 }
