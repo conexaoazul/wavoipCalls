@@ -154,3 +154,17 @@ test('control-plane auth does not reuse JWT secrets', () => {
   assert.equal(userService.includes('CONTROL_PLANE_API_TOKEN'), true);
   assert.equal(userService.includes('process.env.JWT_SECRET'), false);
 });
+
+
+test('authenticated routes are tenant scoped', () => {
+  const routes = source('routes/index.ts');
+  const tenantScope = source('middleware/enforceTenantScope.ts');
+  const authGate = routes.indexOf('router.use(requireApiToken)');
+  const tenantGate = routes.indexOf('router.use(enforceTenantScope)');
+  const callRoute = routes.indexOf("router.post('/calls'");
+  assert.equal(authGate >= 0, true);
+  assert.equal(tenantGate > authGate, true);
+  assert.equal(callRoute > tenantGate, true);
+  assert.equal(tenantScope.includes('CONTROL_PLANE_TENANT_ID'), true);
+  assert.equal(tenantScope.includes('Tenant scope denied'), true);
+});
