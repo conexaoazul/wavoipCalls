@@ -42,6 +42,7 @@ router.get('/calls/:id', CallController.getCallById);
 router.put('/calls/:id', CallController.updateCall);
 router.delete('/calls/:id', CallController.deleteCall);
 router.get('/calls', handleAsync(CallController.listCalls));
+router.post('/calls/:id/preflight', handleAsync(CallController.preflightCall));
 router.post('/calls/:id/execute-test', handleAsync(CallController.executeTestCall));
 
 // CallLog routes
@@ -79,7 +80,6 @@ router.delete('/elevenlab-tokens/:id', handleAsync(ElevenLabTokenController.dele
 router.get('/elevenlab-tokens', handleAsync(ElevenLabTokenController.listElevenLabTokens));
 router.get('/elevenlab-tokens/:id/agents', handleAsync(ElevenLabTokenController.listAgents));
 router.get('/elevenlab-tokens/:id/phone-numbers', handleAsync(ElevenLabTokenController.listPhoneNumbers));
-router.post('/elevenlab-tokens/:id/outbound-call', handleAsync(ElevenLabTokenController.makeOutboundCall));
 
 // Settings routes
 router.post('/settings', handleAsync(SettingsController.createSetting));
