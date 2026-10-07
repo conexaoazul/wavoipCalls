@@ -95,3 +95,12 @@ test('pending calls are the only mutable calls and exactly one provider is requi
   assert.equal(body.includes("call.dispatchState !== 'pending'"), true);
   assert.equal(body.includes("dispatchState: 'pending'"), true);
 });
+
+
+test('legacy calls cannot become pending during migration', () => {
+  const migration = source('database/migrations/20261006000100-add-voice-dispatch-idempotency.ts');
+  const scheduler = source('services/CallSchedulerService.ts');
+  assert.equal(migration.includes("defaultValue: 'legacy_hold'"), true);
+  assert.equal(migration.includes("SET \"dispatchState\" = 'legacy_hold'"), true);
+  assert.equal(scheduler.includes("dispatchState: 'pending'"), true);
+});
