@@ -30,4 +30,11 @@ for key in POSTGRES_PASSWORD CONTROL_PLANE_API_TOKEN; do
 done
 pass "required secret placeholders replaced"
 
+tenant_id="$(grep -E '^CONTROL_PLANE_TENANT_ID=' "$ENV_FILE" | cut -d= -f2-)"
+case "$tenant_id" in
+  ''|*[!0-9]*) fail "CONTROL_PLANE_TENANT_ID must be a positive integer" ;;
+  0) fail "CONTROL_PLANE_TENANT_ID must be > 0" ;;
+esac
+pass "control-plane tenant scope configured"
+
 printf '%s\n' 'GATE=PASS'
