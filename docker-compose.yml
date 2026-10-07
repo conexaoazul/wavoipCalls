@@ -1,58 +1,56 @@
 services:
-  # Banco de dados PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: calls_postgres
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_EXPOSE_PORT:-5432}:5432"
     volumes:
       - calls_postgres_data:/var/lib/postgresql/data
     networks:
       - calls_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Backend Node.js
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: calls_backend
     environment:
-      # Credenciais
-      NODE_ENV: production
-      TOKEN: 12345ABC
-      JWT_SECRET: 12345ABC
-      JWT_REFRESH_SECRET: 12345ABC
-      
-      # Banco de dados
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+
       DB_DIALECT: postgres
       DB_PORT: 5432
       POSTGRES_HOST: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: postgres
-      
-      # CORS
-      FRONTEND_URL: http://localhost:3001
-      BACKEND_URL: http://localhost
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost}
       PROXY_PORT: 3100
       PORT: 3100
-      
-      # Pool de conexões (valores padrão)
-      POSTGRES_POOLMAX: 50
-      POSTGRES_POOLMIN: 10
-      POSTGRES_POOLACQUIRE: 30000
-      POSTGRES_POOLIDLE: 10000
+
+      POSTGRES_POOLMAX: ${POSTGRES_POOLMAX:-50}
+      POSTGRES_POOLMIN: ${POSTGRES_POOLMIN:-10}
+      POSTGRES_POOLACQUIRE: ${POSTGRES_POOLACQUIRE:-30000}
+      POSTGRES_POOLIDLE: ${POSTGRES_POOLIDLE:-10000}
+
+      VOICE_PROVIDER_TIMEOUT_MS: ${VOICE_PROVIDER_TIMEOUT_MS:-10000}
+      ENABLE_UNSAFE_DIRECT_PROVIDER_OUTBOUND: "false"
+      ENABLE_LEGACY_TOKEN_PATHS: "false"
+      ENABLE_CURL_EXECUTOR: "false"
     ports:
-      - "3100:3100"
+      - "127.0.0.1:${BACKEND_EXPOSE_PORT:-3100}:3100"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -63,7 +61,6 @@ services:
       - calls_network
     restart: unless-stopped
 
-  # Frontend React
   frontend:
     build:
       context: ./frontend
@@ -71,9 +68,9 @@ services:
     container_name: calls_frontend
     environment:
       PORT: 3001
-      REACT_APP_API_URL: http://localhost:3100
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:3100}
     ports:
-      - "3001:3001"
+      - "127.0.0.1:${FRONTEND_EXPOSE_PORT:-3001}:3001"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -88,4 +85,4 @@ volumes:
 
 networks:
   calls_network:
-    driver: bridge 
+    driver: bridge
