@@ -54,6 +54,19 @@ class CallController {
     res.json(calls);
   }
 
+  async preflightCall(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      res.json(await CallService.preflightCall(Number(id), tenantIdNum));
+    } catch (err) {
+      res.status(409).json({ error: (err as Error).message });
+    }
+  }
+
   async executeTestCall(req: Request, res: Response) {
     try {
       const { id } = req.params;
