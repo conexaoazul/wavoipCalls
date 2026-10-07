@@ -5,44 +5,41 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import process from "process";
 import routes from "./routes";
-import "./database";
+import { isDatabaseReady } from "./database";
 const app = express();
-app.set('trust proxy',  3);
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3001"
 }));
 
-app.use(helmet());
-
-app.use(
-  helmet.contentSecurityPolicy({
+app.use(helmet({
+  contentSecurityPolicy: {
     directives: {
-      "default-src": ["'self'"],
-      "base-uri": ["'self'"],
-      "block-all-mixed-content": [],
-      "font-src": ["'self'", "https:", "data:"],
-      "img-src": ["'self'", "data:"],
-      "object-src": ["'none'"],
-      "script-src-attr": ["'none'"],
-      "style-src": ["'self'", "https:", "'unsafe-inline'"],
-      "upgrade-insecure-requests": [],
-      scriptSrc: [
-        "'self'",
-        `*${process.env.FRONTEND_URL || "localhost: 3001"}`
-      ],
-      frameAncestors: [
-        "'self'",
-        `* ${process.env.FRONTEND_URL || "localhost: 3001"}`
-      ]
-    }
-  })
-);
+      defaultSrc: ["'none'"],
+      baseUri: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'none'"],
+    },
+  },
+}));
 
 app.use(cookieParser());
 
-app.use(express.json({ limit: "2000MB" }));
-app.use(express.urlencoded({ extended: true, limit: "2000MB" }));
+const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || "1mb";
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
+
+app.get('/health/live', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/health/ready', (_req: Request, res: Response) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({ status: 'not_ready' });
+  }
+  return res.status(200).json({ status: 'ready' });
+});
 
 app.use('/api', routes);
 

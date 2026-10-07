@@ -1,37 +1,39 @@
 #!/bin/sh
+set -eu
 
-echo "Aguardando banco de dados estar pronto..."
+DB_HOST="${POSTGRES_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
+WAIT_SECONDS="${DB_WAIT_SECONDS:-60}"
 
-# Tentar conectar várias vezes com sleep
-sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
-nc -z postgres 5432 || sleep 5
+echo "Aguardando banco de dados em ${DB_HOST}:${DB_PORT}..."
+elapsed=0
+until nc -z "$DB_HOST" "$DB_PORT" >/dev/null 2>&1; do
+  if [ "$elapsed" -ge "$WAIT_SECONDS" ]; then
+    echo "Banco indisponível após ${WAIT_SECONDS}s; abortando startup." >&2
+    exit 1
+  fi
+  sleep 2
+  elapsed=$((elapsed + 2))
+done
 
-echo "Banco de dados está pronto!"
+echo "Banco disponível."
 
-# Verificar se os arquivos compilados existem
-echo "Verificando arquivos compilados..."
-if [ ! -d "dist" ]; then
-  echo "Diretório dist não encontrado, tentando build novamente..."
-  npm run build
+if [ ! -f "dist/server.js" ]; then
+  echo "Build compilado ausente; imagem inválida." >&2
+  exit 1
 fi
 
-ls -la dist/ || echo "Diretório dist não encontrado"
-ls -la dist/config/ || echo "Diretório dist/config não encontrado"
+# Schema changes are an explicit deployment gate, never a side effect of
+# restarting the API. In LAB, enable only in a one-shot migration job.
+if [ "${RUN_DB_MIGRATIONS:-false}" = "true" ]; then
+  echo "RUN_DB_MIGRATIONS=true: executando migrações explicitamente."
+  npx sequelize-cli db:migrate
+fi
 
-echo "Executando migrações..."
-npx sequelize-cli db:migrate || echo "Erro nas migrações"
+if [ "${RUN_DB_SEEDS:-false}" = "true" ]; then
+  echo "RUN_DB_SEEDS=true: executando seeds explicitamente."
+  npx sequelize-cli db:seed:all
+fi
 
-echo "Executando seeds..."
-npx sequelize-cli db:seed:all || echo "Erro nos seeds"
-
-echo "Iniciando aplicação..."
-node dist/server.js 
+echo "Iniciando API..."
+exec node dist/server.js

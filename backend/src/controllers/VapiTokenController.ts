@@ -1,138 +1,128 @@
 import { Request, Response } from 'express';
 import VapiTokenService from '../services/VapiTokenService';
 import logger from '../utils/logger';
+import { toCredentialList, toCredentialView } from '../utils/security';
 
 class VapiTokenController {
   async createVapiToken(req: Request, res: Response) {
-    logger.info('Dados recebidos para criar VapiToken: ' + JSON.stringify(req.body));
-    const { tenantId, ...data } = req.body;
-    const token = await VapiTokenService.createVapiToken(data, tenantId);
-    res.json(token);
+    try {
+      const { tenantId, token, name } = req.body;
+      const tenantIdNum = Number(tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'token é obrigatório' });
+      }
+
+      logger.info(`Criando credencial Vapi tenant=${tenantIdNum} name=${String(name || '').slice(0, 80)}`);
+      const created = await VapiTokenService.createVapiToken({ token, name }, tenantIdNum);
+      res.json(toCredentialView(created));
+    } catch (error) {
+      logger.error('Erro ao criar credencial Vapi: ' + (error instanceof Error ? error.message : String(error)));
+      res.status(500).json({ error: 'Erro interno do servidor' });
+    }
   }
 
   async getVapiTokenById(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { tenantId } = req.query;
-      
-      // Validar se tenantId é um número válido
-      const tenantIdNum = Number(tenantId);
-      if (isNaN(tenantIdNum)) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um número válido' });
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
-      
-      const token = await VapiTokenService.getVapiTokenById(Number(id), tenantIdNum);
-      res.json(token);
+
+      const token = await VapiTokenService.getVapiTokenById(Number(req.params.id), tenantIdNum);
+      if (!token) return res.status(404).json({ error: 'Credencial não encontrada' });
+      res.json(toCredentialView(token));
     } catch (error) {
-      logger.error('Erro ao buscar token: ' + (error instanceof Error ? error.message : String(error)));
+      logger.error('Erro ao buscar credencial Vapi: ' + (error instanceof Error ? error.message : String(error)));
       res.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
 
   async updateVapiToken(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { tenantId, ...data } = req.body;
-      
-      // Validar se tenantId é um número válido
+      const { tenantId, token, name } = req.body;
       const tenantIdNum = Number(tenantId);
-      if (isNaN(tenantIdNum)) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um número válido' });
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
-      
-      // Verificar se o token existe antes de atualizar
-      const existingToken = await VapiTokenService.getVapiTokenById(Number(id), tenantIdNum);
-      if (!existingToken) {
-        return res.status(404).json({ error: 'Token não encontrado' });
-      }
-      
-      const token = await VapiTokenService.updateVapiToken(Number(id), data, tenantIdNum);
-      res.json({ message: 'Token atualizado com sucesso', token });
+
+      const existing = await VapiTokenService.getVapiTokenById(Number(req.params.id), tenantIdNum);
+      if (!existing) return res.status(404).json({ error: 'Credencial não encontrada' });
+
+      const patch: Record<string, unknown> = {};
+      if (typeof token === 'string' && token.trim()) patch.token = token;
+      if (typeof name === 'string') patch.name = name;
+
+      const updated = await VapiTokenService.updateVapiToken(Number(req.params.id), patch, tenantIdNum);
+      res.json({ message: 'Credencial atualizada com sucesso', token: toCredentialView(updated) });
     } catch (error) {
-      logger.error('Erro ao atualizar token: ' + (error instanceof Error ? error.message : String(error)));
+      logger.error('Erro ao atualizar credencial Vapi: ' + (error instanceof Error ? error.message : String(error)));
       res.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
 
   async deleteVapiToken(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { tenantId } = req.query;
-      
-      // Validar se tenantId é um número válido
-      const tenantIdNum = Number(tenantId);
-      if (isNaN(tenantIdNum)) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um número válido' });
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
-      
-      // Verificar se o token existe antes de deletar
-      const existingToken = await VapiTokenService.getVapiTokenById(Number(id), tenantIdNum);
-      if (!existingToken) {
-        return res.status(404).json({ error: 'Token não encontrado' });
-      }
-      
-      await VapiTokenService.deleteVapiToken(Number(id), tenantIdNum);
-      res.json({ message: 'Token deletado com sucesso' });
+
+      const existing = await VapiTokenService.getVapiTokenById(Number(req.params.id), tenantIdNum);
+      if (!existing) return res.status(404).json({ error: 'Credencial não encontrada' });
+
+      await VapiTokenService.deleteVapiToken(Number(req.params.id), tenantIdNum);
+      res.json({ message: 'Credencial deletada com sucesso' });
     } catch (error) {
-      logger.error('Erro ao deletar token: ' + (error instanceof Error ? error.message : String(error)));
+      logger.error('Erro ao deletar credencial Vapi: ' + (error instanceof Error ? error.message : String(error)));
       res.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
 
   async listAssistants(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { tenantId } = req.query;
-      
-      // Validar se tenantId é um número válido
-      const tenantIdNum = Number(tenantId);
-      if (isNaN(tenantIdNum)) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um número válido' });
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
-      
-      const token = await VapiTokenService.getVapiTokenById(Number(id), tenantIdNum);
-      
-      if (!token) {
-        return res.status(404).json({ error: 'Token não encontrado. Assistants não estão disponíveis.' });
-      }
-      
-      const assistants = await VapiTokenService.listAssistants(token.token);
-      res.json(assistants);
+      const token = await VapiTokenService.getVapiTokenById(Number(req.params.id), tenantIdNum);
+      if (!token) return res.status(404).json({ error: 'Credencial não encontrada' });
+      res.json(await VapiTokenService.listAssistants(token.token));
     } catch (error) {
-      logger.error('Erro ao listar assistants: ' + (error instanceof Error ? error.message : String(error)));
-      res.status(500).json({ error: 'Erro interno do servidor' });
+      logger.error('Erro ao listar Vapi assistants: ' + (error instanceof Error ? error.message : String(error)));
+      res.status(502).json({ error: 'Falha ao consultar provider de voz' });
     }
   }
 
   async listPhoneNumbers(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { tenantId } = req.query;
-      
-      // Validar se tenantId é um número válido
-      const tenantIdNum = Number(tenantId);
-      if (isNaN(tenantIdNum)) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um número válido' });
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
-      
-      const token = await VapiTokenService.getVapiTokenById(Number(id), tenantIdNum);
-      
-      if (!token) {
-        return res.status(404).json({ error: 'Token não encontrado. Phone numbers não estão disponíveis.' });
-      }
-      
-      const phoneNumbers = await VapiTokenService.listPhoneNumbers(token.token);
-      res.json(phoneNumbers);
+      const token = await VapiTokenService.getVapiTokenById(Number(req.params.id), tenantIdNum);
+      if (!token) return res.status(404).json({ error: 'Credencial não encontrada' });
+      res.json(await VapiTokenService.listPhoneNumbers(token.token));
     } catch (error) {
-      logger.error('Erro ao listar phone numbers: ' + (error instanceof Error ? error.message : String(error)));
-      res.status(500).json({ error: 'Erro interno do servidor' });
+      logger.error('Erro ao listar Vapi phone numbers: ' + (error instanceof Error ? error.message : String(error)));
+      res.status(502).json({ error: 'Falha ao consultar provider de voz' });
     }
   }
 
   async listVapiTokens(req: Request, res: Response) {
-    const tokens = await VapiTokenService.getAllVapiTokens();
-    res.json(tokens);
+    try {
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      res.json(toCredentialList(await VapiTokenService.getVapiTokensByTenant(tenantIdNum)));
+    } catch (error) {
+      logger.error('Erro ao listar credenciais Vapi: ' + (error instanceof Error ? error.message : String(error)));
+      res.status(500).json({ error: 'Erro interno do servidor' });
+    }
   }
 }
 
-export default new VapiTokenController(); 
+export default new VapiTokenController();

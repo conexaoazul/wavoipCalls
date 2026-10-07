@@ -3,81 +3,72 @@ import axios from 'axios';
 import '../css/style.css';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PhoneIcon from '@mui/icons-material/Phone';
+
+const TENANT_ID = 1;
 
 const ElevenLabTokenPage: React.FC = () => {
-  const [tokens, setTokens] = useState([]);
+  const [tokens, setTokens] = useState<any[]>([]);
   const [agents, setAgents] = useState<Record<string, any[]>>({});
   const [phoneNumbers, setPhoneNumbers] = useState<Record<string, any[]>>({});
   const [newTokenName, setNewTokenName] = useState('');
   const [newToken, setNewToken] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  
-  // Estados para edição
+
   const [editingToken, setEditingToken] = useState<any>(null);
   const [editTokenName, setEditTokenName] = useState('');
   const [editTokenValue, setEditTokenValue] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
-  
-  // Estados para exclusão
+
   const [deletingToken, setDeletingToken] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  // Estados para fazer chamada
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [selectedToken, setSelectedToken] = useState<any>(null);
-  const [callData, setCallData] = useState({
-    agentId: '',
-    agentPhoneNumberId: '',
-    toNumber: '',
-    conversationInitiationClientData: ''
-  });
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setErrors({});
-      
-      const tokenResponse = await axios.get('/api/elevenlab-tokens');
+
+      const tokenResponse = await axios.get(`/api/elevenlab-tokens?tenantId=${TENANT_ID}`);
       setTokens(tokenResponse.data);
 
       const agentsData: Record<string, any[]> = {};
       const phoneNumbersData: Record<string, any[]> = {};
       const errorData: Record<string, string> = {};
-      
+
       for (const token of tokenResponse.data) {
         try {
-          const response = await axios.get(`/api/elevenlab-tokens/${token.id}/agents?tenantId=1`);
+          const response = await axios.get(
+            `/api/elevenlab-tokens/${token.id}/agents?tenantId=${TENANT_ID}`,
+          );
           agentsData[token.id] = response.data.agents || [];
         } catch (error: any) {
-          if (error.response?.status === 404) {
-            errorData[`agents_${token.id}`] = 'Agents não disponíveis - Token não existe';
-          } else {
-            errorData[`agents_${token.id}`] = 'Erro ao carregar agents';
-          }
+          errorData[`agents_${token.id}`] =
+            error.response?.status === 404
+              ? 'Agents não disponíveis - credencial não encontrada'
+              : 'Erro ao carregar agents';
           agentsData[token.id] = [];
         }
 
         try {
-          const phoneResponse = await axios.get(`/api/elevenlab-tokens/${token.id}/phone-numbers?tenantId=1`);
-          phoneNumbersData[token.id] = phoneResponse.data || [];
+          const response = await axios.get(
+            `/api/elevenlab-tokens/${token.id}/phone-numbers?tenantId=${TENANT_ID}`,
+          );
+          phoneNumbersData[token.id] = response.data || [];
         } catch (error: any) {
-          if (error.response?.status === 404) {
-            errorData[`phones_${token.id}`] = 'Phone numbers não disponíveis - Token não existe';
-          } else {
-            errorData[`phones_${token.id}`] = 'Erro ao carregar phone numbers';
-          }
+          errorData[`phones_${token.id}`] =
+            error.response?.status === 404
+              ? 'Phone numbers não disponíveis - credencial não encontrada'
+              : 'Erro ao carregar phone numbers';
           phoneNumbersData[token.id] = [];
         }
       }
-      
+
       setAgents(agentsData);
       setPhoneNumbers(phoneNumbersData);
       setErrors(errorData);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
-      setErrors({ general: 'Erro ao carregar tokens' });
+      setErrors({ general: 'Erro ao carregar credenciais' });
     } finally {
       setLoading(false);
     }
@@ -89,24 +80,30 @@ const ElevenLabTokenPage: React.FC = () => {
 
   const createToken = async () => {
     if (!newTokenName || !newToken) {
-      setErrors({ create: 'Preencha o nome do Token e o Token.' });
+      setErrors({ create: 'Preencha o nome e o token.' });
       return;
     }
+
     try {
-      await axios.post('/api/elevenlab-tokens', { name: newTokenName, token: newToken, tenantId: 1 });
+      await axios.post('/api/elevenlab-tokens', {
+        name: newTokenName,
+        token: newToken,
+        tenantId: TENANT_ID,
+      });
       setNewTokenName('');
       setNewToken('');
-      fetchData();
+      await fetchData();
     } catch (error) {
-      console.error('Erro ao criar token:', error);
-      setErrors({ create: 'Erro ao criar token' });
+      console.error('Erro ao criar credencial:', error);
+      setErrors({ create: 'Erro ao criar credencial' });
     }
   };
 
   const openEditModal = (token: any) => {
     setEditingToken(token);
     setEditTokenName(token.name);
-    setEditTokenValue(token.token);
+    // Secret is intentionally write-only.
+    setEditTokenValue('');
     setShowEditModal(true);
   };
 
@@ -118,19 +115,19 @@ const ElevenLabTokenPage: React.FC = () => {
   };
 
   const updateToken = async () => {
-    if (editingToken && editTokenName && editTokenValue) {
-      try {
-        await axios.put(`/api/elevenlab-tokens/${editingToken.id}`, {
-          name: editTokenName,
-          token: editTokenValue,
-          tenantId: 1
-        });
-        closeEditModal();
-        fetchData();
-      } catch (error) {
-        console.error('Erro ao atualizar token:', error);
-        setErrors({ update: 'Erro ao atualizar token' });
-      }
+    if (!editingToken || !editTokenName) return;
+
+    try {
+      await axios.put(`/api/elevenlab-tokens/${editingToken.id}`, {
+        name: editTokenName,
+        ...(editTokenValue.trim() ? { token: editTokenValue.trim() } : {}),
+        tenantId: TENANT_ID,
+      });
+      closeEditModal();
+      await fetchData();
+    } catch (error) {
+      console.error('Erro ao atualizar credencial:', error);
+      setErrors({ update: 'Erro ao atualizar credencial' });
     }
   };
 
@@ -145,95 +142,60 @@ const ElevenLabTokenPage: React.FC = () => {
   };
 
   const deleteToken = async () => {
-    if (deletingToken) {
-      try {
-        await axios.delete(`/api/elevenlab-tokens/${deletingToken.id}?tenantId=1`);
-        closeDeleteModal();
-        fetchData();
-      } catch (error) {
-        console.error('Erro ao deletar token:', error);
-        setErrors({ delete: 'Erro ao deletar token' });
-      }
-    }
-  };
-
-  const openCallModal = (token: any) => {
-    setSelectedToken(token);
-    setCallData({
-      agentId: '',
-      agentPhoneNumberId: '',
-      toNumber: '',
-      conversationInitiationClientData: ''
-    });
-    setShowCallModal(true);
-  };
-
-  const closeCallModal = () => {
-    setShowCallModal(false);
-    setSelectedToken(null);
-    setCallData({
-      agentId: '',
-      agentPhoneNumberId: '',
-      toNumber: '',
-      conversationInitiationClientData: ''
-    });
-  };
-
-  const makeCall = async () => {
-    if (!callData.agentId || !callData.agentPhoneNumberId || !callData.toNumber) {
-      setErrors({ call: 'Preencha todos os campos obrigatórios' });
-      return;
-    }
+    if (!deletingToken) return;
 
     try {
-      const payload = {
-        tenantId: 1,
-        agentId: callData.agentId,
-        agentPhoneNumberId: callData.agentPhoneNumberId,
-        toNumber: callData.toNumber,
-        conversationInitiationClientData: callData.conversationInitiationClientData || undefined
-      };
-
-      const response = await axios.post(`/api/elevenlab-tokens/${selectedToken.id}/outbound-call`, payload);
-      alert(`Chamada realizada com sucesso! ${response.data.message}`);
-      closeCallModal();
-      setErrors({});
-    } catch (error: any) {
-      console.error('Erro ao realizar chamada:', error);
-      setErrors({ call: error.response?.data?.error || 'Erro ao realizar chamada' });
+      await axios.delete(
+        `/api/elevenlab-tokens/${deletingToken.id}?tenantId=${TENANT_ID}`,
+      );
+      closeDeleteModal();
+      await fetchData();
+    } catch (error) {
+      console.error('Erro ao deletar credencial:', error);
+      setErrors({ delete: 'Erro ao deletar credencial' });
     }
   };
 
   return (
     <div className="wavoip-page-bg">
       <div className="wavoip-container">
-        <h1 className="wavoip-title">Meus Tokens ElevenLabs</h1>
+        <h1 className="wavoip-title">Credenciais ElevenLabs</h1>
         {errors.general && <div className="wavoip-error">{errors.general}</div>}
         {errors.create && <div className="wavoip-error">{errors.create}</div>}
         {errors.update && <div className="wavoip-error">{errors.update}</div>}
         {errors.delete && <div className="wavoip-error">{errors.delete}</div>}
-        {errors.call && <div className="wavoip-error">{errors.call}</div>}
-        
+
         <div className="wavoip-add-bar">
           <input
             type="text"
             value={newTokenName}
-            onChange={(e) => setNewTokenName(e.target.value)}
-            placeholder="Nome do Token"
+            onChange={(event) => setNewTokenName(event.target.value)}
+            placeholder="Nome da credencial"
             className="wavoip-input"
           />
           <input
-            type="text"
+            type="password"
             value={newToken}
-            onChange={(e) => setNewToken(e.target.value)}
-            placeholder="Token ElevenLabs (xi-api-key)"
+            onChange={(event) => setNewToken(event.target.value)}
+            placeholder="Token ElevenLabs (write-only)"
             className="wavoip-input"
           />
-          <button onClick={createToken} disabled={loading} className="wavoip-btn wavoip-btn-primary">Adicionar Token</button>
+          <button
+            onClick={createToken}
+            disabled={loading}
+            className="wavoip-btn wavoip-btn-primary"
+          >
+            Adicionar credencial
+          </button>
         </div>
-        
+
+        <p style={{ color: '#b0b0b0' }}>
+          Chamadas diretas foram removidas desta tela. O dispatch seguro passa pela fila de
+          ligações, com idempotência, policy e feature flags.
+        </p>
+
         {loading && <div className="wavoip-loading">Carregando...</div>}
-        
+
         <div className="wavoip-table-wrapper">
           <table className="wavoip-table">
             <thead>
@@ -248,40 +210,61 @@ const ElevenLabTokenPage: React.FC = () => {
               {tokens.map((token: any) => (
                 <tr key={token.id}>
                   <td>{token.name}</td>
-                  <td style={{ maxWidth: 220, wordBreak: 'break-all', fontSize: 13, color: '#b0b0b0', padding: '10px 8px' }}>
+                  <td
+                    style={{
+                      maxWidth: 220,
+                      wordBreak: 'break-all',
+                      fontSize: 13,
+                      color: '#b0b0b0',
+                      padding: '10px 8px',
+                    }}
+                  >
                     {errors[`agents_${token.id}`] ? (
-                      <span className="wavoip-status-warn">{errors[`agents_${token.id}`]}</span>
-                    ) : agents[token.id] === undefined ? (
-                      <span className="wavoip-status-wait">Verificando...</span>
+                      <span className="wavoip-status-warn">
+                        {errors[`agents_${token.id}`]}
+                      </span>
                     ) : (
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {agents[token.id]?.map((agent: any) => (
+                        {(agents[token.id] || []).map((agent: any) => (
                           <li key={agent.agent_id}>{agent.name}</li>
                         ))}
                       </ul>
                     )}
                   </td>
-                  <td style={{ maxWidth: 220, wordBreak: 'break-all', fontSize: 13, color: '#b0b0b0', padding: '10px 8px' }}>
+                  <td
+                    style={{
+                      maxWidth: 220,
+                      wordBreak: 'break-all',
+                      fontSize: 13,
+                      color: '#b0b0b0',
+                      padding: '10px 8px',
+                    }}
+                  >
                     {errors[`phones_${token.id}`] ? (
-                      <span className="wavoip-status-warn">{errors[`phones_${token.id}`]}</span>
-                    ) : phoneNumbers[token.id] === undefined ? (
-                      <span className="wavoip-status-wait">Verificando...</span>
+                      <span className="wavoip-status-warn">
+                        {errors[`phones_${token.id}`]}
+                      </span>
                     ) : (
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
-                        {phoneNumbers[token.id]?.map((number: any) => (
+                        {(phoneNumbers[token.id] || []).map((number: any) => (
                           <li key={number.phone_number_id}>{number.phone_number}</li>
                         ))}
                       </ul>
                     )}
                   </td>
                   <td>
-                    {/* <button onClick={() => openCallModal(token)} className="wavoip-btn wavoip-btn-primary" title="Fazer Chamada">
-                      <PhoneIcon fontSize="inherit" style={{ fontSize: 16 }} />
-                    </button> */}
-                    <button onClick={() => openEditModal(token)} className="wavoip-btn wavoip-btn-edit" title="Editar">
+                    <button
+                      onClick={() => openEditModal(token)}
+                      className="wavoip-btn wavoip-btn-edit"
+                      title="Editar"
+                    >
                       <EditIcon fontSize="inherit" style={{ fontSize: 16 }} />
                     </button>
-                    <button onClick={() => openDeleteModal(token)} className="wavoip-btn wavoip-btn-delete" title="Deletar">
+                    <button
+                      onClick={() => openDeleteModal(token)}
+                      className="wavoip-btn wavoip-btn-delete"
+                      title="Deletar"
+                    >
                       <DeleteIcon fontSize="inherit" style={{ fontSize: 16 }} />
                     </button>
                   </td>
@@ -291,105 +274,67 @@ const ElevenLabTokenPage: React.FC = () => {
           </table>
         </div>
 
-        {/* Modal de Edição */}
         {showEditModal && (
           <div className="wavoip-modal-bg">
             <div className="wavoip-modal">
-              <h3>Editar Token</h3>
+              <h3>Editar credencial</h3>
               <div className="wavoip-modal-field">
                 <label>Nome:</label>
                 <input
                   type="text"
                   value={editTokenName}
-                  onChange={(e) => setEditTokenName(e.target.value)}
+                  onChange={(event) => setEditTokenName(event.target.value)}
                   className="wavoip-input"
                 />
               </div>
               <div className="wavoip-modal-field">
-                <label>Token:</label>
+                <label>Novo token:</label>
                 <input
-                  type="text"
+                  type="password"
                   value={editTokenValue}
-                  onChange={(e) => setEditTokenValue(e.target.value)}
+                  onChange={(event) => setEditTokenValue(event.target.value)}
+                  placeholder="Deixe em branco para manter o segredo atual"
                   className="wavoip-input"
                 />
               </div>
               <div className="wavoip-modal-actions">
-                <button onClick={closeEditModal} className="wavoip-btn">Cancelar</button>
-                <button onClick={updateToken} className="wavoip-btn wavoip-btn-primary">
-                  <EditIcon fontSize="inherit" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />Salvar
+                <button onClick={closeEditModal} className="wavoip-btn">
+                  Cancelar
+                </button>
+                <button
+                  onClick={updateToken}
+                  className="wavoip-btn wavoip-btn-primary"
+                >
+                  <EditIcon
+                    fontSize="inherit"
+                    style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }}
+                  />
+                  Salvar
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Modal de Confirmação de Exclusão */}
         {showDeleteModal && (
           <div className="wavoip-modal-bg">
             <div className="wavoip-modal">
-              <h3>Confirmar Exclusão</h3>
-              <p>Tem certeza que deseja deletar o token "{deletingToken?.name}"?</p>
+              <h3>Confirmar exclusão</h3>
+              <p>Tem certeza que deseja deletar a credencial "{deletingToken?.name}"?</p>
               <p className="wavoip-modal-warn">Esta ação não pode ser desfeita.</p>
               <div className="wavoip-modal-actions">
-                <button onClick={closeDeleteModal} className="wavoip-btn">Cancelar</button>
-                <button onClick={deleteToken} className="wavoip-btn wavoip-btn-delete">
-                  <DeleteIcon fontSize="inherit" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />Deletar
+                <button onClick={closeDeleteModal} className="wavoip-btn">
+                  Cancelar
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de Chamada */}
-        {showCallModal && (
-          <div className="wavoip-modal-bg">
-            <div className="wavoip-modal">
-              <h3>Fazer Chamada - {selectedToken?.name}</h3>
-              <div className="wavoip-modal-field">
-                <label>Agent ID:</label>
-                <input
-                  type="text"
-                  value={callData.agentId}
-                  onChange={(e) => setCallData({...callData, agentId: e.target.value})}
-                  placeholder="ID do agent"
-                  className="wavoip-input"
-                />
-              </div>
-              <div className="wavoip-modal-field">
-                <label>Phone Number ID:</label>
-                <input
-                  type="text"
-                  value={callData.agentPhoneNumberId}
-                  onChange={(e) => setCallData({...callData, agentPhoneNumberId: e.target.value})}
-                  placeholder="ID do número de telefone"
-                  className="wavoip-input"
-                />
-              </div>
-              <div className="wavoip-modal-field">
-                <label>Número de Destino:</label>
-                <input
-                  type="text"
-                  value={callData.toNumber}
-                  onChange={(e) => setCallData({...callData, toNumber: e.target.value})}
-                  placeholder="+5511999999999"
-                  className="wavoip-input"
-                />
-              </div>
-              <div className="wavoip-modal-field">
-                <label>Dados do Cliente (opcional):</label>
-                <textarea
-                  value={callData.conversationInitiationClientData}
-                  onChange={(e) => setCallData({...callData, conversationInitiationClientData: e.target.value})}
-                  placeholder="Dados adicionais para a conversa"
-                  className="wavoip-input"
-                  rows={3}
-                />
-              </div>
-              <div className="wavoip-modal-actions">
-                <button onClick={closeCallModal} className="wavoip-btn">Cancelar</button>
-                <button onClick={makeCall} className="wavoip-btn wavoip-btn-primary">
-                  <PhoneIcon fontSize="inherit" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />Fazer Chamada
+                <button
+                  onClick={deleteToken}
+                  className="wavoip-btn wavoip-btn-delete"
+                >
+                  <DeleteIcon
+                    fontSize="inherit"
+                    style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }}
+                  />
+                  Deletar
                 </button>
               </div>
             </div>
