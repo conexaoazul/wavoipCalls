@@ -1,6 +1,5 @@
 import ElevenLabToken from '../models/ElevenLabToken';
 import axios from 'axios';
-import ElevenLabsVoiceProvider from './providers/ElevenLabsVoiceProvider';
 
 class ElevenLabTokenService {
   async createElevenLabToken(data: any, tenantId: number) {
@@ -40,26 +39,6 @@ class ElevenLabTokenService {
     });
 
     return response.data;
-  }
-
-  async makeOutboundCall(
-    elevenLabToken: string,
-    agentId: string,
-    agentPhoneNumberId: string,
-    toNumber: string,
-    conversationInitiationClientData?: any,
-    correlationId?: string,
-  ) {
-    const result = await ElevenLabsVoiceProvider.startCall({
-      credential: elevenLabToken,
-      agentId,
-      phoneNumberId: agentPhoneNumberId,
-      toNumber,
-      conversationInitiationClientData,
-      correlationId,
-    });
-
-    return result.raw;
   }
 
   async getElevenLabTokensByTenant(tenantId: number) {
