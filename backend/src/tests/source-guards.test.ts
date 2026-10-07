@@ -137,3 +137,13 @@ test('request bodies are bounded and readiness is database-backed', () => {
   assert.equal(server.includes('await initializeDatabase()'), true);
   assert.equal(db.includes('databaseReady = true'), true);
 });
+
+
+test('historical users tenant migration is clean-install safe', () => {
+  const early = source('database/migrations/20231010120001-add-tenantId-to-users.ts');
+  const followUp = source('database/migrations/20231010120101-fix-users-tenant-fk.ts');
+  assert.equal(early.includes('showAllTables'), true);
+  assert.equal(early.includes("allowNull: !tenantsExist"), true);
+  assert.equal(followUp.includes("Users contains rows without tenantId"), true);
+  assert.equal(followUp.includes("users_tenant_id_fk"), true);
+});
