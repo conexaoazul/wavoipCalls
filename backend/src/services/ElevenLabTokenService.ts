@@ -62,8 +62,8 @@ class ElevenLabTokenService {
     return result.raw;
   }
 
-  async getAllElevenLabTokens() {
-    return ElevenLabToken.findAll();
+  async getElevenLabTokensByTenant(tenantId: number) {
+    return ElevenLabToken.findAll({ where: { tenantId } });
   }
 }
 
