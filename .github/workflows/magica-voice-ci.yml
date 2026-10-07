@@ -41,10 +41,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Prepare ephemeral LAB env
         run: cp deploy/lab/.env.lab.example .env.lab
-      - name: Start isolated PostgreSQL
-        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml up -d postgres
-      - name: Apply migrations once
-        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml --profile migration run --rm migrate
+      - name: Run LAB preflight and one-shot migration script
+        run: bash scripts/lab-migrate.sh .env.lab
       - name: Start backend with dispatch OFF
         run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml up -d backend
       - name: Wait for readiness
