@@ -52,3 +52,10 @@ test('control-plane routes require bearer auth', () => {
   assert.equal(authGate > publicProbe, true);
   assert.equal(credentialRoute > authGate, true);
 });
+
+
+test('new call API requires caller supplied idempotency', () => {
+  const body = source('controllers/CallController.ts');
+  assert.equal(body.includes("Idempotency-Key é obrigatória"), true);
+  assert.equal(body.includes("req.header('Idempotency-Key')"), true);
+});
