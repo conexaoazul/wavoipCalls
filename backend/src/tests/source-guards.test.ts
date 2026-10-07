@@ -66,3 +66,12 @@ test('master voice dispatch kill switch is required', () => {
   assert.equal(body.includes("VOICE_DISPATCH_ENABLED === 'true'"), true);
   assert.equal(body.includes('Voice dispatch está desabilitado por feature flag'), true);
 });
+
+
+test('provider and ElevenLabs refs are allowlisted before dispatch', () => {
+  const body = source('services/CallSchedulerService.ts');
+  assert.equal(body.includes('VOICE_ENABLED_PROVIDERS'), true);
+  assert.equal(body.includes('VOICE_ELEVENLABS_AGENT_ALLOWLIST'), true);
+  assert.equal(body.includes('VOICE_ELEVENLABS_PHONE_ALLOWLIST'), true);
+  assert.equal(body.includes("allowed.size > 0 && allowed.has(value)"), true);
+});
