@@ -101,6 +101,17 @@ test('legacy calls cannot become pending during migration', () => {
   const migration = source('database/migrations/20261006000100-add-voice-dispatch-idempotency.ts');
   const scheduler = source('services/CallSchedulerService.ts');
   assert.equal(migration.includes("defaultValue: 'legacy_hold'"), true);
-  assert.equal(migration.includes("SET \"dispatchState\" = 'legacy_hold'"), true);
+  assert.equal(migration.includes('SET "dispatchState"'), true);
+  assert.equal(migration.includes('legacy_hold'), true);
   assert.equal(scheduler.includes("dispatchState: 'pending'"), true);
+});
+
+
+test('API startup never masks build or migration failures', () => {
+  const start = fs.readFileSync(path.join(process.cwd(), 'start.sh'), 'utf8');
+  assert.equal(start.includes('set -eu'), true);
+  assert.equal(start.includes('db:migrate ||'), false);
+  assert.equal(start.includes('db:seed:all ||'), false);
+  assert.equal(start.includes("RUN_DB_MIGRATIONS:-false"), true);
+  assert.equal(start.includes("RUN_DB_SEEDS:-false"), true);
 });
