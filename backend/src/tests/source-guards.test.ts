@@ -190,3 +190,11 @@ test('API CSP and browser token storage stay minimal', () => {
   assert.equal(authContext.includes('localStorage'), false);
   assert.equal(authContext.includes('sessionStorage'), true);
 });
+
+
+test('LAB bootstrap is scoped to the configured tenant', () => {
+  const script = fs.readFileSync(path.join(process.cwd(), '..', 'scripts', 'lab-bootstrap-tenant.sh'), 'utf8');
+  assert.equal(script.includes('CONTROL_PLANE_TENANT_ID'), true);
+  assert.equal(script.includes('disabled-lab-login'), true);
+  assert.equal(script.includes('ON CONFLICT (id) DO UPDATE'), true);
+});
