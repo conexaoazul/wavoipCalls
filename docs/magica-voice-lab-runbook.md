@@ -16,10 +16,9 @@ sem emitir chamadas.
 
 ## Sequência
 
-1. Copiar `deploy/lab/.env.lab.example` para `.env.lab` e preencher somente
-   segredos locais.
+1. Copiar `deploy/lab/.env.lab.example` para `.env.lab`, preencher os segredos locais e o identificador do Agent LAB dedicado.
 2. Rodar `bash scripts/lab-preflight.sh .env.lab`.
-3. Rodar `bash scripts/lab-migrate.sh .env.lab`.
+3. Rodar `bash scripts/lab-migrate.sh .env.lab`; o script aplica migrations e cria/atualiza apenas o tenant LAB configurado.
 4. Subir `postgres`, `backend` e `frontend`:
    `docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml up -d postgres backend frontend`.
 5. Validar `GET /health/live` e `GET /health/ready`.
