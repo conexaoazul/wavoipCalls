@@ -10,30 +10,55 @@ import Settings from '../models/Settings';
 import CallSchedulerService from '../services/CallSchedulerService';
 import SettingsService from '../services/SettingsService';
 import logger from '../utils/logger';
-const dbConfig = require("../config/database");
 
+const dbConfig = require("../config/database");
 const sequelize = new Sequelize(dbConfig);
 
 sequelize.addModels([
   User, Tenant, Call, CallLog, WavoipToken, VapiToken, ElevenLabToken, Settings
 ]);
 
-sequelize.authenticate().then(async () => {
-  const tenants = await Tenant.findAll();
-  for (const tenant of tenants) {
-    let intervalSeconds = 60;
-    try {
-      const setting = await SettingsService.getSettingByType('interval', tenant.id);
-      if (setting && setting.value && !isNaN(Number(setting.value))) {
-        intervalSeconds = Number(setting.value);
+let databaseReady = false;
+let initializationPromise: Promise<void> | null = null;
+
+export function isDatabaseReady(): boolean {
+  return databaseReady;
+}
+
+export function initializeDatabase(): Promise<void> {
+  if (initializationPromise) return initializationPromise;
+
+  initializationPromise = (async () => {
+    await sequelize.authenticate();
+
+    const tenants = await Tenant.findAll();
+    for (const tenant of tenants) {
+      let intervalSeconds = 60;
+      try {
+        const setting = await SettingsService.getSettingByType('interval', tenant.id);
+        if (setting?.value && !isNaN(Number(setting.value))) {
+          intervalSeconds = Number(setting.value);
+        }
+      } catch (error) {
+        logger.warn(`Tenant ${tenant.id}: interval indisponível; usando 60s`);
       }
-    } catch (e) {
-      logger.warn(`Não foi possível buscar setting interval para tenant ${tenant.id}, usando padrão 60s`);
+      await CallSchedulerService.startScheduler(intervalSeconds, tenant.id);
     }
-    CallSchedulerService.startScheduler(intervalSeconds, tenant.id);
-  }
-}).catch((error) => {
-  logger.error('Erro ao conectar com o banco: ' + (error instanceof Error ? error.message : String(error)));
-});
+
+    databaseReady = true;
+    logger.info('Banco autenticado e schedulers inicializados.');
+  })().catch((error) => {
+    databaseReady = false;
+    initializationPromise = null;
+    throw error;
+  });
+
+  return initializationPromise;
+}
+
+export async function closeDatabase(): Promise<void> {
+  databaseReady = false;
+  await sequelize.close();
+}
 
 export default sequelize;
