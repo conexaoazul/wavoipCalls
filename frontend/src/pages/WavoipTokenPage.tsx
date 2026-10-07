@@ -224,7 +224,6 @@ const WavoipTokenPage: React.FC = () => {
                   value={editTokenValue}
                   onChange={(e) => setEditTokenValue(e.target.value)}
                   placeholder="Deixe em branco para manter o segredo atual"
-                  type="password"
                   className="wavoip-input"
                 />
               </div>
