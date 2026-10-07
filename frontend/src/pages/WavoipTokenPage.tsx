@@ -164,10 +164,10 @@ const WavoipTokenPage: React.FC = () => {
             className="wavoip-input"
           />
           <input
-            type="text"
+            type="password"
             value={newTokenValue}
             onChange={(e) => setNewTokenValue(e.target.value)}
-            placeholder="Token Wavoip" type="password"
+            placeholder="Token Wavoip"
             className="wavoip-input"
           />
           <button onClick={createToken} disabled={loading} className="wavoip-btn wavoip-btn-primary">Adicionar Token</button>
@@ -240,7 +240,7 @@ const WavoipTokenPage: React.FC = () => {
               <div className="wavoip-modal-field">
                 <label>Token:</label>
                 <input
-                  type="text"
+                  type="password"
                   value={editTokenValue}
                   onChange={(e) => setEditTokenValue(e.target.value)}
                   placeholder="Deixe em branco para manter o segredo atual"
