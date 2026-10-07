@@ -59,3 +59,10 @@ test('new call API requires caller supplied idempotency', () => {
   assert.equal(body.includes("Idempotency-Key é obrigatória"), true);
   assert.equal(body.includes("req.header('Idempotency-Key')"), true);
 });
+
+
+test('master voice dispatch kill switch is required', () => {
+  const body = source('services/CallSchedulerService.ts');
+  assert.equal(body.includes("VOICE_DISPATCH_ENABLED === 'true'"), true);
+  assert.equal(body.includes('Voice dispatch está desabilitado por feature flag'), true);
+});
