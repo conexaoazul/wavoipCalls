@@ -11,6 +11,7 @@ import AuthController from '../controllers/AuthController';
 import CurlExecutorController from '../controllers/CurlExecutorController';
 import dotenv from 'dotenv';
 import requireApiToken from '../middleware/requireApiToken';
+import enforceTenantScope from '../middleware/enforceTenantScope';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ const handleAsync = (fn: Function) => (req: any, res: any, next: any) => {
 // Public authentication probe. All control-plane routes below require Bearer auth.
 router.get('/auth/validate-token', AuthController.validateToken);
 router.use(requireApiToken);
+router.use(enforceTenantScope);
 
 // User routes
 router.post('/users', UserController.createUser);
