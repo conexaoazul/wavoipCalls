@@ -168,3 +168,12 @@ test('authenticated routes are tenant scoped', () => {
   assert.equal(tenantScope.includes('CONTROL_PLANE_TENANT_ID'), true);
   assert.equal(tenantScope.includes('Tenant scope denied'), true);
 });
+
+
+test('legacy admin surface is disabled by default', () => {
+  const routes = source('routes/index.ts');
+  const adminGate = source('middleware/requireAdminFeature.ts');
+  assert.equal(routes.includes("requireAdminFeature, UserController"), true);
+  assert.equal(routes.includes("requireAdminFeature, TenantController"), true);
+  assert.equal(adminGate.includes("CONTROL_PLANE_ADMIN_ENABLED !== 'true'"), true);
+});
