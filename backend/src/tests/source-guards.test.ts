@@ -87,3 +87,11 @@ test('credential list endpoints require tenant scope', () => {
     assert.equal(body.includes('Number(req.query.tenantId)'), true, file);
   }
 });
+
+
+test('pending calls are the only mutable calls and exactly one provider is required', () => {
+  const body = source('services/CallService.ts');
+  assert.equal(body.includes('assertExactlyOneProvider'), true);
+  assert.equal(body.includes("call.dispatchState !== 'pending'"), true);
+  assert.equal(body.includes("dispatchState: 'pending'"), true);
+});
