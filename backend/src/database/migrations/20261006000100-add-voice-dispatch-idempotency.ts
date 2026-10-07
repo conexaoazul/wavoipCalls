@@ -9,11 +9,19 @@ export async function up(queryInterface: QueryInterface) {
     type: DataTypes.STRING(64),
     allowNull: true,
   });
-    await queryInterface.addColumn('Calls', 'dispatchState', {
+
+  // Existing rows must never become newly dispatchable just because this
+  // migration is applied. They enter legacy_hold; only calls created through
+  // the hardened path are inserted as pending by CallService.
+  await queryInterface.addColumn('Calls', 'dispatchState', {
     type: DataTypes.STRING(16),
     allowNull: false,
-    defaultValue: 'pending',
+    defaultValue: 'legacy_hold',
   });
+  await queryInterface.sequelize.query(
+    'UPDATE "Calls" SET "dispatchState" = \'legacy_hold\' WHERE "dispatchState" IS NULL OR "dispatchState" = \'pending\''
+  );
+
   await queryInterface.addColumn('Calls', 'dispatchStartedAt', {
     type: DataTypes.DATE,
     allowNull: true,
