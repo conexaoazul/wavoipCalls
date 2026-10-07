@@ -41,3 +41,14 @@ test('scheduler claims before dispatch and marks ambiguous errors unknown', () =
   assert.equal(body.includes("dispatchState: 'unknown'"), true);
   assert.equal(body.includes('automatic_retry=false'), true);
 });
+
+
+test('control-plane routes require bearer auth', () => {
+  const body = source('routes/index.ts');
+  const publicProbe = body.indexOf("router.get('/auth/validate-token'");
+  const authGate = body.indexOf('router.use(requireApiToken)');
+  const credentialRoute = body.indexOf("router.post('/elevenlab-tokens'");
+  assert.equal(publicProbe >= 0, true);
+  assert.equal(authGate > publicProbe, true);
+  assert.equal(credentialRoute > authGate, true);
+});
