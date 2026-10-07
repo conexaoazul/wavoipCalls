@@ -23,7 +23,7 @@ grep -Fq 'VOICE_ELEVENLABS_AGENT_ALLOWLIST: "agent_7601m3j18tjtfayaf1ryfjfyfc6h"
 grep -Fq 'VOICE_ELEVENLABS_PHONE_ALLOWLIST: ""' "$COMPOSE"   || fail "phone allowlist is not deny-all"
 pass "voice policy is deny-by-default and dispatch-off"
 
-for key in POSTGRES_PASSWORD JWT_SECRET JWT_REFRESH_SECRET; do
+for key in POSTGRES_PASSWORD CONTROL_PLANE_API_TOKEN; do
   if ! grep -Eq "^${key}=.{16,}$" "$ENV_FILE"; then
     fail "$key missing or too short"
   fi
