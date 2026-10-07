@@ -32,6 +32,10 @@ type DispatchResponse =
     };
 
 class CallSchedulerService {
+  private dispatchEnabled(): boolean {
+    return process.env.VOICE_DISPATCH_ENABLED === 'true';
+  }
+
   private tenantSchedulers: Record<number, { intervalId: NodeJS.Timeout, currentInterval: number }> = {};
 
   private includeProviders() {
@@ -57,6 +61,7 @@ class CallSchedulerService {
   }
 
   async processScheduledCalls(): Promise<void> {
+    if (!this.dispatchEnabled()) return;
     try {
       const calls = await this.findPendingCalls();
       logger.info(`Fila de voz: ${calls.length} chamada(s) pendente(s)`);
@@ -332,6 +337,7 @@ class CallSchedulerService {
   }
 
   async processScheduledCallsForTenant(tenantId: number): Promise<void> {
+    if (!this.dispatchEnabled()) return;
     try {
       const calls = await this.findPendingCalls(tenantId);
       logger.info(`Tenant ${tenantId}: ${calls.length} chamada(s) pendente(s)`);
@@ -342,6 +348,10 @@ class CallSchedulerService {
   }
 
   public async executeCallById(callId: number, tenantId: number): Promise<unknown> {
+    if (!this.dispatchEnabled()) {
+      throw new Error('Voice dispatch está desabilitado por feature flag');
+    }
+
     const call = await Call.findOne({
       where: { id: callId, tenantId },
       include: this.includeProviders(),
