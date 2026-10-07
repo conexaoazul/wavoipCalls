@@ -21,9 +21,9 @@ class UserService {
 
   async verifyToken(token: string): Promise<{ valid: boolean }> {
     try {
-      const secret = process.env.JWT_SECRET;
+      const secret = process.env.CONTROL_PLANE_API_TOKEN;
       if (!secret) {
-        throw new Error('JWT_SECRET is not defined');
+        throw new Error('CONTROL_PLANE_API_TOKEN is not defined');
       }
       const tokenBuffer = Buffer.from(token);
       const secretBuffer = Buffer.from(secret);
