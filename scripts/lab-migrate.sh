@@ -13,4 +13,7 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE" up -d postgres
 echo "Running one-shot migration job..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE" --profile migration run --rm migrate
 
-echo "Migration complete. Dispatch remains disabled."
+echo "Bootstrapping the scoped LAB tenant..."
+bash "$ROOT/scripts/lab-bootstrap-tenant.sh" "$ENV_FILE"
+
+echo "Migration/bootstrap complete. Dispatch remains disabled."
