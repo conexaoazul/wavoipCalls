@@ -128,50 +128,6 @@ class ElevenLabTokenController {
     }
   }
 
-  async makeOutboundCall(req: Request, res: Response) {
-    if (process.env.ENABLE_UNSAFE_DIRECT_PROVIDER_OUTBOUND !== 'true') {
-      return res.status(410).json({
-        error: 'Outbound direto desabilitado. Use a fila /calls com Idempotency-Key.',
-      });
-    }
-
-    const correlationId = String(req.header('Idempotency-Key') || '').trim();
-    if (!correlationId) {
-      return res.status(400).json({ error: 'Idempotency-Key é obrigatório' });
-    }
-
-    try {
-      const { id } = req.params;
-      const { tenantId, agentId, agentPhoneNumberId, toNumber, conversationInitiationClientData } = req.body;
-      const tenantIdNum = Number(tenantId);
-      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
-        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
-      }
-      if (!agentId || !agentPhoneNumberId || !toNumber) {
-        return res.status(400).json({ error: 'agentId, agentPhoneNumberId e toNumber são obrigatórios' });
-      }
-
-      const token = await ElevenLabTokenService.getElevenLabTokenById(Number(id), tenantIdNum);
-      if (!token) {
-        return res.status(404).json({ error: 'Credencial não encontrada. Chamada não pode ser realizada.' });
-      }
-
-      const callResult = await ElevenLabTokenService.makeOutboundCall(
-        token.token,
-        String(agentId),
-        String(agentPhoneNumberId),
-        String(toNumber),
-        conversationInitiationClientData,
-        correlationId.slice(0, 128),
-      );
-
-      res.json(callResult);
-    } catch (error) {
-      logger.error('Erro ao realizar chamada ElevenLabs: ' + (error instanceof Error ? error.message : String(error)));
-      res.status(502).json({ error: 'Estado de dispatch possivelmente ambíguo; não tente novamente automaticamente' });
-    }
-  }
-
   async listElevenLabTokens(req: Request, res: Response) {
     try {
       const tenantIdNum = Number(req.query.tenantId);
