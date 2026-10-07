@@ -3,7 +3,6 @@ import axios from 'axios';
 import '../css/style.css';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PhoneIcon from '@mui/icons-material/Phone';
 
 const ElevenLabTokenPage: React.FC = () => {
   const [tokens, setTokens] = useState([]);
@@ -23,16 +22,6 @@ const ElevenLabTokenPage: React.FC = () => {
   // Estados para exclusão
   const [deletingToken, setDeletingToken] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  // Estados para fazer chamada
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [selectedToken, setSelectedToken] = useState<any>(null);
-  const [callData, setCallData] = useState({
-    agentId: '',
-    agentPhoneNumberId: '',
-    toNumber: '',
-    conversationInitiationClientData: ''
-  });
 
   const fetchData = async () => {
     try {
@@ -157,53 +146,6 @@ const ElevenLabTokenPage: React.FC = () => {
     }
   };
 
-  const openCallModal = (token: any) => {
-    setSelectedToken(token);
-    setCallData({
-      agentId: '',
-      agentPhoneNumberId: '',
-      toNumber: '',
-      conversationInitiationClientData: ''
-    });
-    setShowCallModal(true);
-  };
-
-  const closeCallModal = () => {
-    setShowCallModal(false);
-    setSelectedToken(null);
-    setCallData({
-      agentId: '',
-      agentPhoneNumberId: '',
-      toNumber: '',
-      conversationInitiationClientData: ''
-    });
-  };
-
-  const makeCall = async () => {
-    if (!callData.agentId || !callData.agentPhoneNumberId || !callData.toNumber) {
-      setErrors({ call: 'Preencha todos os campos obrigatórios' });
-      return;
-    }
-
-    try {
-      const payload = {
-        tenantId: 1,
-        agentId: callData.agentId,
-        agentPhoneNumberId: callData.agentPhoneNumberId,
-        toNumber: callData.toNumber,
-        conversationInitiationClientData: callData.conversationInitiationClientData || undefined
-      };
-
-      const response = await axios.post(`/api/elevenlab-tokens/${selectedToken.id}/outbound-call`, payload);
-      alert(`Chamada realizada com sucesso! ${response.data.message}`);
-      closeCallModal();
-      setErrors({});
-    } catch (error: any) {
-      console.error('Erro ao realizar chamada:', error);
-      setErrors({ call: error.response?.data?.error || 'Erro ao realizar chamada' });
-    }
-  };
-
   return (
     <div className="wavoip-page-bg">
       <div className="wavoip-container">
@@ -275,9 +217,6 @@ const ElevenLabTokenPage: React.FC = () => {
                     )}
                   </td>
                   <td>
-                    {/* <button onClick={() => openCallModal(token)} className="wavoip-btn wavoip-btn-primary" title="Fazer Chamada">
-                      <PhoneIcon fontSize="inherit" style={{ fontSize: 16 }} />
-                    </button> */}
                     <button onClick={() => openEditModal(token)} className="wavoip-btn wavoip-btn-edit" title="Editar">
                       <EditIcon fontSize="inherit" style={{ fontSize: 16 }} />
                     </button>
