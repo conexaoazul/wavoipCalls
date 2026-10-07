@@ -82,7 +82,11 @@ class WavoipTokenController {
 
   async listWavoipTokens(req: Request, res: Response) {
     try {
-      res.json(toCredentialList(await WavoipTokenService.getAllWavoipTokens()));
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      res.json(toCredentialList(await WavoipTokenService.getWavoipTokensByTenant(tenantIdNum)));
     } catch (error) {
       logger.error('Erro ao listar credenciais Wavoip: ' + (error instanceof Error ? error.message : String(error)));
       res.status(500).json({ error: 'Erro interno do servidor' });
