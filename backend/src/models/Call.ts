@@ -47,7 +47,7 @@ class Call extends Model {
     allowNull: false,
     defaultValue: 'pending',
   })
-  dispatchState!: 'pending' | 'dispatching' | 'completed' | 'failed' | 'unknown';
+  dispatchState!: 'legacy_hold' | 'pending' | 'dispatching' | 'completed' | 'failed' | 'unknown';
 
   @Column({
     type: DataType.DATE,
