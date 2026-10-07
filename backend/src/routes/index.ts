@@ -12,6 +12,7 @@ import CurlExecutorController from '../controllers/CurlExecutorController';
 import dotenv from 'dotenv';
 import requireApiToken from '../middleware/requireApiToken';
 import enforceTenantScope from '../middleware/enforceTenantScope';
+import requireAdminFeature from '../middleware/requireAdminFeature';
 
 dotenv.config();
 
@@ -26,17 +27,17 @@ router.get('/auth/validate-token', AuthController.validateToken);
 router.use(requireApiToken);
 router.use(enforceTenantScope);
 
-// User routes
-router.post('/users', UserController.createUser);
-router.get('/users/:id', UserController.getUserById);
-router.put('/users/:id', UserController.updateUser);
-router.delete('/users/:id', UserController.deleteUser);
+// Legacy administration is hidden unless explicitly enabled.
+// LAB/control-plane defaults to false; future multi-tenant admin should move to OIDC/Keycloak roles.
+router.post('/users', requireAdminFeature, UserController.createUser);
+router.get('/users/:id', requireAdminFeature, UserController.getUserById);
+router.put('/users/:id', requireAdminFeature, UserController.updateUser);
+router.delete('/users/:id', requireAdminFeature, UserController.deleteUser);
 
-// Tenant routes
-router.post('/tenants', TenantController.createTenant);
-router.get('/tenants/:id', TenantController.getTenantById);
-router.put('/tenants/:id', TenantController.updateTenant);
-router.delete('/tenants/:id', TenantController.deleteTenant);
+router.post('/tenants', requireAdminFeature, TenantController.createTenant);
+router.get('/tenants/:id', requireAdminFeature, TenantController.getTenantById);
+router.put('/tenants/:id', requireAdminFeature, TenantController.updateTenant);
+router.delete('/tenants/:id', requireAdminFeature, TenantController.deleteTenant);
 
 // Call routes
 router.post('/calls', CallController.createCall);
