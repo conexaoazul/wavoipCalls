@@ -3,9 +3,23 @@ import CallSchedulerService from './CallSchedulerService';
 import { buildCallRequestFingerprint } from '../utils/callFingerprint';
 
 class CallService {
+  private assertExactlyOneProvider(vapiTokenId?: unknown, elevenLabTokenId?: unknown) {
+    const count = Number(Boolean(vapiTokenId)) + Number(Boolean(elevenLabTokenId));
+    if (count !== 1) {
+      throw new Error('A ligação deve ter exatamente um provider: Vapi ou ElevenLabs');
+    }
+  }
+
+  private assertMutable(call: Call) {
+    if (call.executed || call.dispatchState !== 'pending') {
+      throw new Error(`Ligação não pode ser alterada no estado ${call.dispatchState}`);
+    }
+  }
+
   async createCall(data: any, tenantId: number) {
     const idempotencyKey = String(data.idempotencyKey || '');
     if (!idempotencyKey) throw new Error('idempotencyKey é obrigatória');
+    this.assertExactlyOneProvider(data.vapiTokenId, data.elevenLabTokenId);
 
     const requestFingerprint = buildCallRequestFingerprint(data, tenantId);
     const existing = await Call.findOne({ where: { tenantId, idempotencyKey } });
@@ -50,6 +64,10 @@ class CallService {
   }
 
   async updateCall(id: number, data: any, tenantId: number) {
+    const call = await Call.findOne({ where: { id, tenantId } });
+    if (!call) throw new Error('Call não encontrada');
+    this.assertMutable(call);
+
     const safeData = { ...data };
     for (const protectedField of [
       'idempotencyKey',
@@ -64,11 +82,23 @@ class CallService {
     ]) {
       delete safeData[protectedField];
     }
-    return Call.update(safeData, { where: { id, tenantId } });
+
+    const nextVapi = Object.prototype.hasOwnProperty.call(safeData, 'vapiTokenId')
+      ? safeData.vapiTokenId
+      : call.vapiTokenId;
+    const nextEleven = Object.prototype.hasOwnProperty.call(safeData, 'elevenLabTokenId')
+      ? safeData.elevenLabTokenId
+      : call.elevenLabTokenId;
+    this.assertExactlyOneProvider(nextVapi, nextEleven);
+
+    return Call.update(safeData, { where: { id, tenantId, executed: false, dispatchState: 'pending' } });
   }
 
   async deleteCall(id: number, tenantId: number) {
-    return Call.destroy({ where: { id, tenantId } });
+    const call = await Call.findOne({ where: { id, tenantId } });
+    if (!call) throw new Error('Call não encontrada');
+    this.assertMutable(call);
+    return Call.destroy({ where: { id, tenantId, executed: false, dispatchState: 'pending' } });
   }
 
   async listCalls(tenantId: number, limit = 20, offset = 0) {
