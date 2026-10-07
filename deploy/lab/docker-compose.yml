@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-magica_voice_lab}
+      POSTGRES_USER: ${POSTGRES_USER:-magica_voice_lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${POSTGRES_EXPOSE_PORT:-5438}:5432"
+    volumes:
+      - magica_voice_lab_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-magica_voice_lab} -d ${POSTGRES_DB:-magica_voice_lab}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.50"
+
+  migrate:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    profiles: ["migration"]
+    environment: &backend_env
+      NODE_ENV: production
+      DB_DIALECT: postgres
+      DB_PORT: 5432
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-magica_voice_lab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-magica_voice_lab}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      FRONTEND_URL: ${FRONTEND_URL:-http://127.0.0.1:3011}
+      BACKEND_URL: ${BACKEND_URL:-http://127.0.0.1:3110}
+      PORT: 3100
+      TRUST_PROXY_HOPS: "1"
+      REQUEST_BODY_LIMIT: "1mb"
+      RUN_DB_MIGRATIONS: "false"
+      RUN_DB_SEEDS: "false"
+      VOICE_PROVIDER_TIMEOUT_MS: "10000"
+      VOICE_DISPATCH_ENABLED: "false"
+      VOICE_PREFLIGHT_ENABLED: "true"
+      VOICE_ENABLED_PROVIDERS: "elevenlabs"
+      VOICE_ELEVENLABS_AGENT_ALLOWLIST: "agent_7601m3j18tjtfayaf1ryfjfyfc6h"
+      VOICE_ELEVENLABS_PHONE_ALLOWLIST: ""
+      ENABLE_LEGACY_TOKEN_PATHS: "false"
+      ENABLE_CURL_EXECUTOR: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "migrate"]
+    restart: "no"
+    mem_limit: 384m
+    cpus: "0.50"
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    environment:
+      <<: *backend_env
+    ports:
+      - "127.0.0.1:${BACKEND_EXPOSE_PORT:-3110}:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3100/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.50"
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3001
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://127.0.0.1:3110}
+    ports:
+      - "127.0.0.1:${FRONTEND_EXPOSE_PORT:-3011}:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.50"
+
+volumes:
+  magica_voice_lab_pg:
