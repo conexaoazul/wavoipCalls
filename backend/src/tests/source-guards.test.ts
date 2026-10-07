@@ -30,9 +30,11 @@ test('legacy token-in-path route is disabled by default', () => {
   assert.equal(body.includes("ENABLE_LEGACY_TOKEN_PATHS !== 'true'"), true);
 });
 
-test('direct provider outbound is disabled by default', () => {
-  const body = source('controllers/ElevenLabTokenController.ts');
-  assert.equal(body.includes("ENABLE_UNSAFE_DIRECT_PROVIDER_OUTBOUND !== 'true'"), true);
+test('direct provider outbound route is absent', () => {
+  const routes = source('routes/index.ts');
+  const controller = source('controllers/ElevenLabTokenController.ts');
+  assert.equal(routes.includes('/outbound-call'), false);
+  assert.equal(controller.includes('makeOutboundCall'), false);
 });
 
 test('scheduler claims before dispatch and marks ambiguous errors unknown', () => {
@@ -114,4 +116,13 @@ test('API startup never masks build or migration failures', () => {
   assert.equal(start.includes('db:seed:all ||'), false);
   assert.equal(start.includes("RUN_DB_MIGRATIONS:-false"), true);
   assert.equal(start.includes("RUN_DB_SEEDS:-false"), true);
+});
+
+
+test('read-only preflight is separately gated from dispatch', () => {
+  const routes = source('routes/index.ts');
+  const scheduler = source('services/CallSchedulerService.ts');
+  assert.equal(routes.includes("router.post('/calls/:id/preflight'"), true);
+  assert.equal(scheduler.includes("VOICE_PREFLIGHT_ENABLED === 'true'"), true);
+  assert.equal(scheduler.includes('networkDispatchPerformed: false'), true);
 });
