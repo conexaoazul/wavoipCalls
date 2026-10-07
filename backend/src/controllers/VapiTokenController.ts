@@ -113,7 +113,11 @@ class VapiTokenController {
 
   async listVapiTokens(req: Request, res: Response) {
     try {
-      res.json(toCredentialList(await VapiTokenService.getAllVapiTokens()));
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      res.json(toCredentialList(await VapiTokenService.getVapiTokensByTenant(tenantIdNum)));
     } catch (error) {
       logger.error('Erro ao listar credenciais Vapi: ' + (error instanceof Error ? error.message : String(error)));
       res.status(500).json({ error: 'Erro interno do servidor' });
