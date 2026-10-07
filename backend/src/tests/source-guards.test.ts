@@ -75,3 +75,15 @@ test('provider and ElevenLabs refs are allowlisted before dispatch', () => {
   assert.equal(body.includes('VOICE_ELEVENLABS_PHONE_ALLOWLIST'), true);
   assert.equal(body.includes("allowed.size > 0 && allowed.has(value)"), true);
 });
+
+
+test('credential list endpoints require tenant scope', () => {
+  for (const file of [
+    'controllers/ElevenLabTokenController.ts',
+    'controllers/VapiTokenController.ts',
+    'controllers/WavoipTokenController.ts',
+  ]) {
+    const body = source(file);
+    assert.equal(body.includes('Number(req.query.tenantId)'), true, file);
+  }
+});
