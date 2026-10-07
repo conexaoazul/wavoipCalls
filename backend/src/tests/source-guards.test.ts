@@ -177,3 +177,16 @@ test('legacy admin surface is disabled by default', () => {
   assert.equal(routes.includes("requireAdminFeature, TenantController"), true);
   assert.equal(adminGate.includes("CONTROL_PLANE_ADMIN_ENABLED !== 'true'"), true);
 });
+
+
+test('API CSP and browser token storage stay minimal', () => {
+  const app = source('app.ts');
+  const authContext = fs.readFileSync(
+    path.join(process.cwd(), '..', 'frontend', 'src', 'contexts', 'AuthContext.tsx'),
+    'utf8',
+  );
+  assert.equal(app.includes("defaultSrc: [\"'none'\"]"), true);
+  assert.equal(app.includes("frameAncestors: [\"'none'\"]"), true);
+  assert.equal(authContext.includes('localStorage'), false);
+  assert.equal(authContext.includes('sessionStorage'), true);
+});
