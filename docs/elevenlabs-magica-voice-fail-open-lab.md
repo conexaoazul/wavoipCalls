@@ -28,9 +28,7 @@ O P0 deixou de ser apenas desenho nesta branch. Já estão versionados:
 - compose sem credenciais default;
 - CI backend + frontend.
 
-Na ElevenLabs foi criada a branch isolada `magica-voice-bridge-lab`
-(`agtbrch_1901m49tg4ycej9sw7d5wkpcjyjk`) a partir da versão LAB
-`agtvrsn_5601m3j1cb18e1btvmcqt6sde6cz`, sem tráfego live.
+Na ElevenLabs foi criada a branch isolada `magica-voice-bridge-lab` a partir da configuração LAB, sem tráfego live.
 
 O teste de honestidade CRM/agenda/WhatsApp foi iniciado nessa branch, mas a
 avaliação foi encerrada por **créditos insuficientes** da workspace ElevenLabs.
