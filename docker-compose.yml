@@ -26,6 +26,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       CONTROL_PLANE_API_TOKEN: ${CONTROL_PLANE_API_TOKEN:?CONTROL_PLANE_API_TOKEN is required}
+      CONTROL_PLANE_TENANT_ID: "${CONTROL_PLANE_TENANT_ID:-1}"
 
       DB_DIALECT: postgres
       DB_PORT: 5432
