@@ -11,9 +11,11 @@ class CallController {
         return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
       }
 
-      const idempotencyKey = normalizeIdempotencyKey(
-        req.header('Idempotency-Key') || bodyIdempotencyKey,
-      );
+      const suppliedIdempotencyKey = req.header('Idempotency-Key') || bodyIdempotencyKey;
+      if (!suppliedIdempotencyKey) {
+        return res.status(400).json({ error: 'Idempotency-Key é obrigatória para criar uma ligação' });
+      }
+      const idempotencyKey = normalizeIdempotencyKey(suppliedIdempotencyKey);
       const call = await CallService.createCall({ ...data, idempotencyKey }, tenantIdNum);
       res.json(call);
     } catch (error) {
