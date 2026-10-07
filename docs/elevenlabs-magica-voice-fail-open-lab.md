@@ -13,6 +13,31 @@ em um único caminho crítico.
 A primeira entrega é um **LAB isolado**, sem alteração de trunks/agents de
 produção e sem ferramentas com capacidade de escrita.
 
+## Estado de implementação — 2026-10-07
+
+O P0 deixou de ser apenas desenho nesta branch. Já estão versionados:
+
+- secret redaction e credential DTO write-only para ElevenLabs/Vapi/Wavoip;
+- auth gate obrigatório no control plane;
+- Wavoip sem token em URL;
+- executor HTTP desligado por default;
+- adapter ElevenLabs sem retry automático em POST;
+- idempotency/correlation no modelo de chamadas;
+- claim atômico de dispatch e estado `unknown` para falha ambígua;
+- UI sem reveal de credenciais;
+- compose sem credenciais default;
+- CI backend + frontend.
+
+Na ElevenLabs foi criada a branch isolada `magica-voice-bridge-lab`
+(`agtbrch_1901m49tg4ycej9sw7d5wkpcjyjk`) a partir da versão LAB
+`agtvrsn_5601m3j1cb18e1btvmcqt6sde6cz`, sem tráfego live.
+
+O teste de honestidade CRM/agenda/WhatsApp foi iniciado nessa branch, mas a
+avaliação foi encerrada por **créditos insuficientes** da workspace ElevenLabs.
+Logo, esse run é **BLOCKED**, não PASS/FAIL de comportamento.
+
+Nenhum deploy, trunk ou phone number foi alterado.
+
 ## 2. O que já existe neste repositório
 
 O backend já possui integração ElevenLabs suficiente para não começarmos do zero:
