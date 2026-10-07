@@ -17,14 +17,8 @@ Estado validado no GitHub:
 
 ## Target
 
-Preferir um nó OCI com os labels observados:
-
-- `provider=oci`;
-- `pool=oci-e5`;
-- `workload=stateless`;
-- `consultas_oci=true`.
-
-Não usar `azul2` para este LAB.
+Preferir um worker OCI dedicado a workloads stateless, com folga de CPU, memória
+e disco. Não usar o nó primário da plataforma para este LAB.
 
 O PostgreSQL deste LAB é **descartável** e fica local ao host. Não reutilizar esse
 desenho para produção.
@@ -71,7 +65,8 @@ cp magica-voice-lab/deploy/lab/.env.lab.example magica-voice-lab/.env.lab
 Preencher apenas no host:
 
 - `POSTGRES_PASSWORD`;
-- `CONTROL_PLANE_API_TOKEN`.
+- `CONTROL_PLANE_API_TOKEN`;
+- `VOICE_ELEVENLABS_AGENT_ALLOWLIST` com o identificador do Agent LAB dedicado.
 
 Nunca colar esses valores em ticket, PR, shell history compartilhado ou chat.
 
