@@ -19,7 +19,7 @@ pass "compose config valid"
 grep -Fq 'VOICE_DISPATCH_ENABLED: "false"' "$COMPOSE"   || fail "dispatch is not hard-disabled in LAB compose"
 grep -Fq 'VOICE_PREFLIGHT_ENABLED: "true"' "$COMPOSE"   || fail "preflight is not enabled in LAB compose"
 grep -Fq 'VOICE_ENABLED_PROVIDERS: "elevenlabs"' "$COMPOSE"   || fail "ElevenLabs provider is not the only LAB provider"
-grep -Fq 'VOICE_ELEVENLABS_AGENT_ALLOWLIST: "agent_7601m3j18tjtfayaf1ryfjfyfc6h"' "$COMPOSE"   || fail "Blue Voice LAB agent allowlist drift"
+grep -Fq 'VOICE_ELEVENLABS_AGENT_ALLOWLIST: "${VOICE_ELEVENLABS_AGENT_ALLOWLIST:-}"' "$COMPOSE"   || fail "LAB agent allowlist must come from the env file"
 grep -Fq 'VOICE_ELEVENLABS_PHONE_ALLOWLIST: ""' "$COMPOSE"   || fail "phone allowlist is not deny-all"
 pass "voice policy is deny-by-default and dispatch-off"
 
@@ -36,5 +36,12 @@ case "$tenant_id" in
   0) fail "CONTROL_PLANE_TENANT_ID must be > 0" ;;
 esac
 pass "control-plane tenant scope configured"
+
+agent_allowlist="$(grep -E '^VOICE_ELEVENLABS_AGENT_ALLOWLIST=' "$ENV_FILE" | cut -d= -f2-)"
+case "$agent_allowlist" in
+  agent_[A-Za-z0-9_-]*) ;;
+  *) fail "VOICE_ELEVENLABS_AGENT_ALLOWLIST must contain a LAB agent identifier" ;;
+esac
+pass "LAB agent allowlist supplied by deployment env"
 
 printf '%s\n' 'GATE=PASS'
