@@ -147,3 +147,10 @@ test('historical users tenant migration is clean-install safe', () => {
   assert.equal(followUp.includes("Users contains rows without tenantId"), true);
   assert.equal(followUp.includes("users_tenant_id_fk"), true);
 });
+
+
+test('control-plane auth does not reuse JWT secrets', () => {
+  const userService = source('services/UserService.ts');
+  assert.equal(userService.includes('CONTROL_PLANE_API_TOKEN'), true);
+  assert.equal(userService.includes('process.env.JWT_SECRET'), false);
+});
