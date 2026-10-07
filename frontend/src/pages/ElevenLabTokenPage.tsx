@@ -106,7 +106,7 @@ const ElevenLabTokenPage: React.FC = () => {
   const openEditModal = (token: any) => {
     setEditingToken(token);
     setEditTokenName(token.name);
-    setEditTokenValue(token.token);
+    setEditTokenValue('');
     setShowEditModal(true);
   };
 
@@ -118,11 +118,11 @@ const ElevenLabTokenPage: React.FC = () => {
   };
 
   const updateToken = async () => {
-    if (editingToken && editTokenName && editTokenValue) {
+    if (editingToken && editTokenName) {
       try {
         await axios.put(`/api/elevenlab-tokens/${editingToken.id}`, {
           name: editTokenName,
-          token: editTokenValue,
+          ...(editTokenValue.trim() ? { token: editTokenValue.trim() } : {}),
           tenantId: 1
         });
         closeEditModal();
@@ -226,7 +226,7 @@ const ElevenLabTokenPage: React.FC = () => {
             type="text"
             value={newToken}
             onChange={(e) => setNewToken(e.target.value)}
-            placeholder="Token ElevenLabs (xi-api-key)"
+            placeholder="Token ElevenLabs (xi-api-key)" type="password"
             className="wavoip-input"
           />
           <button onClick={createToken} disabled={loading} className="wavoip-btn wavoip-btn-primary">Adicionar Token</button>
@@ -311,6 +311,8 @@ const ElevenLabTokenPage: React.FC = () => {
                   type="text"
                   value={editTokenValue}
                   onChange={(e) => setEditTokenValue(e.target.value)}
+                  placeholder="Deixe em branco para manter o segredo atual"
+                  type="password"
                   className="wavoip-input"
                 />
               </div>
