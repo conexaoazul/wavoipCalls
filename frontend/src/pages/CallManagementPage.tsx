@@ -43,6 +43,7 @@ const CallManagementPage: React.FC = () => {
   // Estados para criação/edição de Call
   const [showCallModal, setShowCallModal] = useState(false);
   const [editingCall, setEditingCall] = useState<any>(null);
+  const [newCallIdempotencyKey, setNewCallIdempotencyKey] = useState('');
   const [callForm, setCallForm] = useState({
     customerNumber: '',
     assistantId: '',
@@ -276,12 +277,16 @@ const CallManagementPage: React.FC = () => {
   // CRUD Calls
   const openCallModal = (call: any = null) => {
     setEditingCall(call);
+    if (!call) {
+      setNewCallIdempotencyKey(`ui:${window.crypto.randomUUID()}`);
+    }
     setShowCallModal(true);
   };
 
   const closeCallModal = () => {
     setShowCallModal(false);
     setEditingCall(null);
+    setNewCallIdempotencyKey('');
     setCallForm({ customerNumber: '', assistantId: '', phoneNumberId: '', scheduleAt: '' });
     setSelectedVapiToken('');
     setSelectedElevenLabToken('');
@@ -334,7 +339,12 @@ const CallManagementPage: React.FC = () => {
       if (editingCall) {
         await axios.put(`/api/calls/${editingCall.id}`, payload);
       } else {
-        await axios.post('/api/calls', payload);
+        if (!newCallIdempotencyKey) {
+          throw new Error('Idempotency-Key da nova ligação não foi inicializada');
+        }
+        await axios.post('/api/calls', payload, {
+          headers: { 'Idempotency-Key': newCallIdempotencyKey }
+        });
       }
       closeCallModal();
       fetchData();
@@ -388,6 +398,7 @@ const CallManagementPage: React.FC = () => {
   // Função para duplicar uma call
   const duplicateCall = (call: any) => {
     setEditingCall(null); // Nova call
+    setNewCallIdempotencyKey(`ui:${window.crypto.randomUUID()}`);
     setPendingDuplicate(call); // Salva dados para preencher depois
     
     if (call.vapiTokenId) {
