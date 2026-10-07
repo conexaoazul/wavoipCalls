@@ -36,6 +36,10 @@ class CallSchedulerService {
     return process.env.VOICE_DISPATCH_ENABLED === 'true';
   }
 
+  private preflightEnabled(): boolean {
+    return process.env.VOICE_PREFLIGHT_ENABLED === 'true';
+  }
+
   private enabledProviders(): Set<string> {
     return new Set(
       String(process.env.VOICE_ENABLED_PROVIDERS || '')
@@ -385,6 +389,33 @@ class CallSchedulerService {
     } catch (error) {
       logger.error(`Tenant ${tenantId}: erro no scheduler: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  public async preflightCallById(callId: number, tenantId: number): Promise<unknown> {
+    if (!this.preflightEnabled()) {
+      throw new Error('Voice preflight está desabilitado por feature flag');
+    }
+
+    const call = await Call.findOne({
+      where: { id: callId, tenantId },
+      include: this.includeProviders(),
+    });
+    if (!call) throw new Error('Call não encontrada');
+    if (call.executed || call.dispatchState !== 'pending') {
+      throw new Error(`Call não elegível para preflight: state=${call.dispatchState} executed=${call.executed}`);
+    }
+
+    const valid = await this.validatePhoneNumberAndWavoipToken(call);
+    if (!valid) throw new Error('Validação de provider/policy falhou');
+
+    return {
+      ok: true,
+      callId: call.id,
+      provider: call.elevenLabTokenId ? 'elevenlabs' : 'vapi',
+      dispatchState: call.dispatchState,
+      idempotencyKeyPresent: Boolean(call.idempotencyKey),
+      networkDispatchPerformed: false,
+    };
   }
 
   public async executeCallById(callId: number, tenantId: number): Promise<unknown> {
