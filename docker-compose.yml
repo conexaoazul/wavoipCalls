@@ -39,6 +39,8 @@ services:
       BACKEND_URL: ${BACKEND_URL:-http://localhost}
       PROXY_PORT: 3100
       PORT: 3100
+      TRUST_PROXY_HOPS: "1"
+      REQUEST_BODY_LIMIT: "1mb"
       RUN_DB_MIGRATIONS: "false"
       RUN_DB_SEEDS: "false"
       DB_WAIT_SECONDS: "60"
@@ -64,6 +66,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3100/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - calls_network
     restart: unless-stopped
