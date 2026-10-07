@@ -3,8 +3,6 @@ import axios from 'axios';
 import '../css/style.css';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 const WavoipTokenPage: React.FC = () => {
   const [tokens, setTokens] = useState([]);
@@ -23,24 +21,6 @@ const WavoipTokenPage: React.FC = () => {
   // Estados para exclusão
   const [deletingToken, setDeletingToken] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  // Estado para mostrar/ocultar tokens
-  const [visibleTokens, setVisibleTokens] = useState<Record<string, boolean>>({});
-
-  // Função para alternar visibilidade do token
-  const toggleTokenVisibility = (tokenId: string) => {
-    setVisibleTokens(prev => ({
-      ...prev,
-      [tokenId]: !prev[tokenId]
-    }));
-  };
-
-  // Função para mascarar o token
-  const maskToken = (token: string) => {
-    if (!token) return '';
-    if (token.length <= 8) return '*'.repeat(token.length);
-    return token.substring(0, 4) + '*'.repeat(token.length - 8) + token.substring(token.length - 4);
-  };
 
   const fetchData = async () => {
     try {
