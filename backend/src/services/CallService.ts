@@ -1,13 +1,20 @@
 import Call from '../models/Call';
 import CallSchedulerService from './CallSchedulerService';
+import { buildCallRequestFingerprint } from '../utils/callFingerprint';
 
 class CallService {
   async createCall(data: any, tenantId: number) {
     const idempotencyKey = String(data.idempotencyKey || '');
     if (!idempotencyKey) throw new Error('idempotencyKey é obrigatória');
 
+    const requestFingerprint = buildCallRequestFingerprint(data, tenantId);
     const existing = await Call.findOne({ where: { tenantId, idempotencyKey } });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.requestFingerprint !== requestFingerprint) {
+        throw new Error('Idempotency-Key já usada com payload diferente');
+      }
+      return existing;
+    }
 
     const safeData = { ...data };
     delete safeData.executed;
@@ -21,13 +28,19 @@ class CallService {
       return await Call.create({
         ...safeData,
         tenantId,
+        requestFingerprint,
         dispatchState: 'pending',
         executed: false,
       });
     } catch (error) {
       // Handles a concurrent duplicate create racing on the unique index.
       const raced = await Call.findOne({ where: { tenantId, idempotencyKey } });
-      if (raced) return raced;
+      if (raced) {
+        if (raced.requestFingerprint !== requestFingerprint) {
+          throw new Error('Idempotency-Key já usada com payload diferente');
+        }
+        return raced;
+      }
       throw error;
     }
   }
@@ -40,6 +53,7 @@ class CallService {
     const safeData = { ...data };
     for (const protectedField of [
       'idempotencyKey',
+      'requestFingerprint',
       'executed',
       'dispatchState',
       'dispatchStartedAt',
