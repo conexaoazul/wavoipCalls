@@ -13,31 +13,16 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3001"
 }));
 
-app.use(helmet());
-
-app.use(
-  helmet.contentSecurityPolicy({
+app.use(helmet({
+  contentSecurityPolicy: {
     directives: {
-      "default-src": ["'self'"],
-      "base-uri": ["'self'"],
-      "block-all-mixed-content": [],
-      "font-src": ["'self'", "https:", "data:"],
-      "img-src": ["'self'", "data:"],
-      "object-src": ["'none'"],
-      "script-src-attr": ["'none'"],
-      "style-src": ["'self'", "https:", "'unsafe-inline'"],
-      "upgrade-insecure-requests": [],
-      scriptSrc: [
-        "'self'",
-        `*${process.env.FRONTEND_URL || "localhost: 3001"}`
-      ],
-      frameAncestors: [
-        "'self'",
-        `* ${process.env.FRONTEND_URL || "localhost: 3001"}`
-      ]
-    }
-  })
-);
+      defaultSrc: ["'none'"],
+      baseUri: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'none'"],
+    },
+  },
+}));
 
 app.use(cookieParser());
 
