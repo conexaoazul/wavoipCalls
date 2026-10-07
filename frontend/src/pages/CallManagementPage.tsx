@@ -106,10 +106,10 @@ const CallManagementPage: React.FC = () => {
       const logsResponse = await axios.get(`/api/call-logs?tenantId=1`);
       setLogs(logsResponse.data);
       // Carregar VapiTokens
-      const vapiResponse = await axios.get('/api/vapi-tokens');
+      const vapiResponse = await axios.get('/api/vapi-tokens?tenantId=1');
       setVapiTokens(vapiResponse.data);
       // Carregar ElevenLabTokens
-      const elevenLabResponse = await axios.get('/api/elevenlab-tokens');
+      const elevenLabResponse = await axios.get('/api/elevenlab-tokens?tenantId=1');
       setElevenLabTokens(elevenLabResponse.data);
       // Carregar WavoipTokens
       const wavoipResponse = await axios.get('/api/wavoip-tokens/tenant/1');
