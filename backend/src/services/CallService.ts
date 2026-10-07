@@ -120,6 +120,10 @@ class CallService {
     };
   }
 
+  async preflightCall(id: number, tenantId: number) {
+    return CallSchedulerService.preflightCallById(id, tenantId);
+  }
+
   async executeTestCall(id: number, tenantId: number) {
     return CallSchedulerService.executeCallById(id, tenantId);
   }
