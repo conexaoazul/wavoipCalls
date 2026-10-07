@@ -29,7 +29,7 @@ const VapiTokenPage: React.FC = () => {
       setLoading(true);
       setErrors({});
       
-      const tokenResponse = await axios.get('/api/vapi-tokens');
+      const tokenResponse = await axios.get('/api/vapi-tokens?tenantId=1');
       setTokens(tokenResponse.data);
 
       const assistantsData: Record<string, any[]> = {};
