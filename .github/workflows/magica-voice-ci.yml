@@ -34,6 +34,37 @@ jobs:
           cp deploy/lab/.env.lab.example .env.lab
           bash scripts/lab-preflight.sh .env.lab
 
+  lab-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare ephemeral LAB env
+        run: cp deploy/lab/.env.lab.example .env.lab
+      - name: Start isolated PostgreSQL
+        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml up -d postgres
+      - name: Apply migrations once
+        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml --profile migration run --rm migrate
+      - name: Start backend with dispatch OFF
+        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml up -d backend
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3110/health/ready >/dev/null; then
+              echo "LAB backend ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml logs --no-color backend
+          exit 1
+      - name: Prove dispatch remains off
+        run: |
+          docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml exec -T backend             sh -c '[ "$VOICE_DISPATCH_ENABLED" = "false" ] && [ "$VOICE_PREFLIGHT_ENABLED" = "true" ]'
+      - name: Cleanup
+        if: always()
+        run: docker compose --env-file .env.lab -f deploy/lab/docker-compose.yml down -v
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
