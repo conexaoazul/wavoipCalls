@@ -27,7 +27,7 @@ const WavoipTokenPage: React.FC = () => {
       setLoading(true);
       setErrors({});
       
-      const tokenResponse = await axios.get('/api/wavoip-tokens');
+      const tokenResponse = await axios.get('/api/wavoip-tokens?tenantId=1');
       setTokens(tokenResponse.data);
 
       // Verificar disponibilidade de todos os tokens
