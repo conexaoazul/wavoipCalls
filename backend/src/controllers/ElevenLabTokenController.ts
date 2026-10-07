@@ -174,7 +174,11 @@ class ElevenLabTokenController {
 
   async listElevenLabTokens(req: Request, res: Response) {
     try {
-      const tokens = await ElevenLabTokenService.getAllElevenLabTokens();
+      const tenantIdNum = Number(req.query.tenantId);
+      if (!Number.isInteger(tenantIdNum) || tenantIdNum <= 0) {
+        return res.status(400).json({ error: 'tenantId é obrigatório e deve ser um inteiro válido' });
+      }
+      const tokens = await ElevenLabTokenService.getElevenLabTokensByTenant(tenantIdNum);
       res.json(toCredentialList(tokens));
     } catch (error) {
       logger.error('Erro ao listar credenciais ElevenLabs: ' + (error instanceof Error ? error.message : String(error)));
