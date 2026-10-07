@@ -39,7 +39,7 @@ const ElevenLabTokenPage: React.FC = () => {
       setLoading(true);
       setErrors({});
       
-      const tokenResponse = await axios.get('/api/elevenlab-tokens');
+      const tokenResponse = await axios.get('/api/elevenlab-tokens?tenantId=1');
       setTokens(tokenResponse.data);
 
       const agentsData: Record<string, any[]> = {};
