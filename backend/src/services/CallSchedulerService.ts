@@ -36,6 +36,29 @@ class CallSchedulerService {
     return process.env.VOICE_DISPATCH_ENABLED === 'true';
   }
 
+  private enabledProviders(): Set<string> {
+    return new Set(
+      String(process.env.VOICE_ENABLED_PROVIDERS || '')
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }
+
+  private providerEnabled(provider: 'vapi' | 'elevenlabs'): boolean {
+    return this.enabledProviders().has(provider);
+  }
+
+  private elevenLabsRefAllowed(value: string, envName: 'VOICE_ELEVENLABS_AGENT_ALLOWLIST' | 'VOICE_ELEVENLABS_PHONE_ALLOWLIST'): boolean {
+    const allowed = new Set(
+      String(process.env[envName] || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    );
+    return allowed.size > 0 && allowed.has(value);
+  }
+
   private tenantSchedulers: Record<number, { intervalId: NodeJS.Timeout, currentInterval: number }> = {};
 
   private includeProviders() {
@@ -168,9 +191,17 @@ class CallSchedulerService {
   private async validatePhoneNumberAndWavoipToken(call: Call): Promise<boolean> {
     try {
       if (call.vapiTokenId && call.vapiToken) {
+        if (!this.providerEnabled('vapi')) {
+          logger.warn(`Provider Vapi bloqueado por policy para chamada ${call.id}`);
+          return false;
+        }
         return await this.validateVapiCall(call);
       }
       if (call.elevenLabTokenId && call.elevenLabToken) {
+        if (!this.providerEnabled('elevenlabs')) {
+          logger.warn(`Provider ElevenLabs bloqueado por policy para chamada ${call.id}`);
+          return false;
+        }
         return await this.validateElevenLabsCall(call);
       }
 
@@ -232,6 +263,15 @@ class CallSchedulerService {
 
   private async validateElevenLabsCall(call: Call): Promise<boolean> {
     try {
+      if (!this.elevenLabsRefAllowed(call.assistantId, 'VOICE_ELEVENLABS_AGENT_ALLOWLIST')) {
+        logger.warn(`ElevenLabs agent ref bloqueado por allowlist para chamada ${call.id}`);
+        return false;
+      }
+      if (!this.elevenLabsRefAllowed(call.phoneNumberId, 'VOICE_ELEVENLABS_PHONE_ALLOWLIST')) {
+        logger.warn(`ElevenLabs phone ref bloqueado por allowlist para chamada ${call.id}`);
+        return false;
+      }
+
       const timeout = Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000);
       await axios.get(
         `https://api.elevenlabs.io/v1/convai/phone-numbers/${encodeURIComponent(call.phoneNumberId)}`,
