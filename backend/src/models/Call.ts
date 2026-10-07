@@ -37,6 +37,12 @@ class Call extends Model {
   idempotencyKey?: string;
 
   @Column({
+    type: DataType.STRING(64),
+    allowNull: true,
+  })
+  requestFingerprint?: string;
+
+  @Column({
     type: DataType.STRING(16),
     allowNull: false,
     defaultValue: 'pending',
