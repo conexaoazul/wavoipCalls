@@ -25,8 +25,7 @@ services:
     container_name: calls_backend
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      CONTROL_PLANE_API_TOKEN: ${CONTROL_PLANE_API_TOKEN:?CONTROL_PLANE_API_TOKEN is required}
 
       DB_DIALECT: postgres
       DB_PORT: 5432
