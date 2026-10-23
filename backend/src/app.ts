@@ -44,6 +44,18 @@ app.use(cookieParser());
 app.use(express.json({ limit: "2000MB" }));
 app.use(express.urlencoded({ extended: true, limit: "2000MB" }));
 
+// Guarda global: toda rota /api exige Bearer == JWT_SECRET (mesma regra do
+// AuthController.validateToken). Protege rotas de user/tenant/call/tokens que
+// antes ficavam abertas.
+app.use("/api", (req: Request, res: Response, next: () => void) => {
+  const token = (req.headers["authorization"] || "").split(" ")[1];
+  if (!process.env.JWT_SECRET || token !== process.env.JWT_SECRET) {
+    res.status(401).json({ valid: false, message: "Token inválido" });
+    return;
+  }
+  next();
+});
+
 app.use('/api', routes);
 
 app.get("/", (req: Request, res: Response) => {
