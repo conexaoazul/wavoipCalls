@@ -1,0 +1,200 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+function source(file: string): string {
+  return fs.readFileSync(path.join(process.cwd(), 'src', file), 'utf8');
+}
+
+test('credential controllers do not log entire request bodies', () => {
+  for (const file of [
+    'controllers/ElevenLabTokenController.ts',
+    'controllers/VapiTokenController.ts',
+    'controllers/WavoipTokenController.ts',
+  ]) {
+    const body = source(file);
+    assert.equal(body.includes('JSON.stringify(req.body)'), false, file);
+  }
+});
+
+test('generic HTTP executor is disabled by default and allowlisted', () => {
+  const body = source('controllers/CurlExecutorController.ts');
+  assert.equal(body.includes("ENABLE_CURL_EXECUTOR !== 'true'"), true);
+  assert.equal(body.includes('CURL_EXECUTOR_ALLOWED_HOSTS'), true);
+  assert.equal(body.includes("parsed.protocol !== 'https:'"), true);
+});
+
+test('legacy token-in-path route is disabled by default', () => {
+  const body = source('controllers/WavoipTokenController.ts');
+  assert.equal(body.includes("ENABLE_LEGACY_TOKEN_PATHS !== 'true'"), true);
+});
+
+test('direct provider outbound route is absent', () => {
+  const routes = source('routes/index.ts');
+  const controller = source('controllers/ElevenLabTokenController.ts');
+  assert.equal(routes.includes('/outbound-call'), false);
+  assert.equal(controller.includes('makeOutboundCall'), false);
+});
+
+test('scheduler claims before dispatch and marks ambiguous errors unknown', () => {
+  const body = source('services/CallSchedulerService.ts');
+  assert.equal(body.includes("dispatchState: 'dispatching'"), true);
+  assert.equal(body.includes("dispatchState: 'unknown'"), true);
+  assert.equal(body.includes('automatic_retry=false'), true);
+});
+
+
+test('control-plane routes require bearer auth', () => {
+  const body = source('routes/index.ts');
+  const publicProbe = body.indexOf("router.get('/auth/validate-token'");
+  const authGate = body.indexOf('router.use(requireApiToken)');
+  const credentialRoute = body.indexOf("router.post('/elevenlab-tokens'");
+  assert.equal(publicProbe >= 0, true);
+  assert.equal(authGate > publicProbe, true);
+  assert.equal(credentialRoute > authGate, true);
+});
+
+
+test('new call API requires caller supplied idempotency', () => {
+  const body = source('controllers/CallController.ts');
+  assert.equal(body.includes("Idempotency-Key é obrigatória"), true);
+  assert.equal(body.includes("req.header('Idempotency-Key')"), true);
+});
+
+
+test('master voice dispatch kill switch is required', () => {
+  const body = source('services/CallSchedulerService.ts');
+  assert.equal(body.includes("VOICE_DISPATCH_ENABLED === 'true'"), true);
+  assert.equal(body.includes('Voice dispatch está desabilitado por feature flag'), true);
+});
+
+
+test('provider and ElevenLabs refs are allowlisted before dispatch', () => {
+  const body = source('services/CallSchedulerService.ts');
+  assert.equal(body.includes('VOICE_ENABLED_PROVIDERS'), true);
+  assert.equal(body.includes('VOICE_ELEVENLABS_AGENT_ALLOWLIST'), true);
+  assert.equal(body.includes('VOICE_ELEVENLABS_PHONE_ALLOWLIST'), true);
+  assert.equal(body.includes("allowed.size > 0 && allowed.has(value)"), true);
+});
+
+
+test('credential list endpoints require tenant scope', () => {
+  for (const file of [
+    'controllers/ElevenLabTokenController.ts',
+    'controllers/VapiTokenController.ts',
+    'controllers/WavoipTokenController.ts',
+  ]) {
+    const body = source(file);
+    assert.equal(body.includes('Number(req.query.tenantId)'), true, file);
+  }
+});
+
+
+test('pending calls are the only mutable calls and exactly one provider is required', () => {
+  const body = source('services/CallService.ts');
+  assert.equal(body.includes('assertExactlyOneProvider'), true);
+  assert.equal(body.includes("call.dispatchState !== 'pending'"), true);
+  assert.equal(body.includes("dispatchState: 'pending'"), true);
+});
+
+
+test('legacy calls cannot become pending during migration', () => {
+  const migration = source('database/migrations/20261006000100-add-voice-dispatch-idempotency.ts');
+  const scheduler = source('services/CallSchedulerService.ts');
+  assert.equal(migration.includes("defaultValue: 'legacy_hold'"), true);
+  assert.equal(migration.includes('SET "dispatchState"'), true);
+  assert.equal(migration.includes('legacy_hold'), true);
+  assert.equal(scheduler.includes("dispatchState: 'pending'"), true);
+});
+
+
+test('API startup never masks build or migration failures', () => {
+  const start = fs.readFileSync(path.join(process.cwd(), 'start.sh'), 'utf8');
+  assert.equal(start.includes('set -eu'), true);
+  assert.equal(start.includes('db:migrate ||'), false);
+  assert.equal(start.includes('db:seed:all ||'), false);
+  assert.equal(start.includes("RUN_DB_MIGRATIONS:-false"), true);
+  assert.equal(start.includes("RUN_DB_SEEDS:-false"), true);
+});
+
+
+test('read-only preflight is separately gated from dispatch', () => {
+  const routes = source('routes/index.ts');
+  const scheduler = source('services/CallSchedulerService.ts');
+  assert.equal(routes.includes("router.post('/calls/:id/preflight'"), true);
+  assert.equal(scheduler.includes("VOICE_PREFLIGHT_ENABLED === 'true'"), true);
+  assert.equal(scheduler.includes('networkDispatchPerformed: false'), true);
+});
+
+
+test('request bodies are bounded and readiness is database-backed', () => {
+  const app = source('app.ts');
+  const server = source('server.ts');
+  const db = source('database/index.ts');
+  assert.equal(app.includes('REQUEST_BODY_LIMIT || "1mb"'), true);
+  assert.equal(app.includes("/health/ready"), true);
+  assert.equal(server.includes('await initializeDatabase()'), true);
+  assert.equal(db.includes('databaseReady = true'), true);
+});
+
+
+test('historical users tenant migration is clean-install safe', () => {
+  const early = source('database/migrations/20231010120001-add-tenantId-to-users.ts');
+  const followUp = source('database/migrations/20231010120101-fix-users-tenant-fk.ts');
+  assert.equal(early.includes('showAllTables'), true);
+  assert.equal(early.includes("allowNull: !tenantsExist"), true);
+  assert.equal(followUp.includes("Users contains rows without tenantId"), true);
+  assert.equal(followUp.includes("users_tenant_id_fk"), true);
+});
+
+
+test('control-plane auth does not reuse JWT secrets', () => {
+  const userService = source('services/UserService.ts');
+  assert.equal(userService.includes('CONTROL_PLANE_API_TOKEN'), true);
+  assert.equal(userService.includes('process.env.JWT_SECRET'), false);
+});
+
+
+test('authenticated routes are tenant scoped', () => {
+  const routes = source('routes/index.ts');
+  const tenantScope = source('middleware/enforceTenantScope.ts');
+  const authGate = routes.indexOf('router.use(requireApiToken)');
+  const tenantGate = routes.indexOf('router.use(enforceTenantScope)');
+  const callRoute = routes.indexOf("router.post('/calls'");
+  assert.equal(authGate >= 0, true);
+  assert.equal(tenantGate > authGate, true);
+  assert.equal(callRoute > tenantGate, true);
+  assert.equal(tenantScope.includes('CONTROL_PLANE_TENANT_ID'), true);
+  assert.equal(tenantScope.includes('Tenant scope denied'), true);
+});
+
+
+test('legacy admin surface is disabled by default', () => {
+  const routes = source('routes/index.ts');
+  const adminGate = source('middleware/requireAdminFeature.ts');
+  assert.equal(routes.includes("requireAdminFeature, UserController"), true);
+  assert.equal(routes.includes("requireAdminFeature, TenantController"), true);
+  assert.equal(adminGate.includes("CONTROL_PLANE_ADMIN_ENABLED !== 'true'"), true);
+});
+
+
+test('API CSP and browser token storage stay minimal', () => {
+  const app = source('app.ts');
+  const authContext = fs.readFileSync(
+    path.join(process.cwd(), '..', 'frontend', 'src', 'contexts', 'AuthContext.tsx'),
+    'utf8',
+  );
+  assert.equal(app.includes("defaultSrc: [\"'none'\"]"), true);
+  assert.equal(app.includes("frameAncestors: [\"'none'\"]"), true);
+  assert.equal(authContext.includes('localStorage'), false);
+  assert.equal(authContext.includes('sessionStorage'), true);
+});
+
+
+test('LAB bootstrap is scoped to the configured tenant', () => {
+  const script = fs.readFileSync(path.join(process.cwd(), '..', 'scripts', 'lab-bootstrap-tenant.sh'), 'utf8');
+  assert.equal(script.includes('CONTROL_PLANE_TENANT_ID'), true);
+  assert.equal(script.includes('disabled-lab-login'), true);
+  assert.equal(script.includes('ON CONFLICT (id) DO UPDATE'), true);
+});

@@ -3,8 +3,6 @@ import axios from 'axios';
 import '../css/style.css';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 const WavoipTokenPage: React.FC = () => {
   const [tokens, setTokens] = useState([]);
@@ -24,41 +22,19 @@ const WavoipTokenPage: React.FC = () => {
   const [deletingToken, setDeletingToken] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Estado para mostrar/ocultar tokens
-  const [visibleTokens, setVisibleTokens] = useState<Record<string, boolean>>({});
-
-  // Função para alternar visibilidade do token
-  const toggleTokenVisibility = (tokenId: string) => {
-    setVisibleTokens(prev => ({
-      ...prev,
-      [tokenId]: !prev[tokenId]
-    }));
-  };
-
-  // Função para mascarar o token
-  const maskToken = (token: string) => {
-    if (!token) return '';
-    if (token.length <= 8) return '*'.repeat(token.length);
-    return token.substring(0, 4) + '*'.repeat(token.length - 8) + token.substring(token.length - 4);
-  };
-
   const fetchData = async () => {
     try {
       setLoading(true);
       setErrors({});
       
-      const tokenResponse = await axios.get('/api/wavoip-tokens');
+      const tokenResponse = await axios.get('/api/wavoip-tokens?tenantId=1');
       setTokens(tokenResponse.data);
 
       // Verificar disponibilidade de todos os tokens
       const statusData: Record<string, any> = {};
       for (const token of tokenResponse.data) {
-        if (!token.token || typeof token.token !== 'string' || token.token.trim() === '') {
-          statusData[token.id] = { available: false, error: 'Token inválido no frontend' };
-          continue;
-        }
         try {
-          const statusResponse = await axios.get(`/api/wavoip-tokens/${encodeURIComponent(token.token)}/check-availability`);
+          const statusResponse = await axios.get(`/api/wavoip-tokens/${token.id}/availability?tenantId=1`);
           statusData[token.id] = statusResponse.data;
         } catch (error: any) {
           statusData[token.id] = { available: false, error: 'Erro ao verificar disponibilidade' };
@@ -100,7 +76,7 @@ const WavoipTokenPage: React.FC = () => {
   const openEditModal = (token: any) => {
     setEditingToken(token);
     setEditTokenName(token.name);
-    setEditTokenValue(token.token);
+    setEditTokenValue('');
     setShowEditModal(true);
   };
 
@@ -112,11 +88,11 @@ const WavoipTokenPage: React.FC = () => {
   };
 
   const updateToken = async () => {
-    if (editingToken && editTokenName && editTokenValue) {
+    if (editingToken && editTokenName) {
       try {
         await axios.put(`/api/wavoip-tokens/${editingToken.id}`, {
           name: editTokenName,
-          token: editTokenValue,
+          ...(editTokenValue.trim() ? { token: editTokenValue.trim() } : {}),
           tenantId: 1
         });
         closeEditModal();
@@ -168,7 +144,7 @@ const WavoipTokenPage: React.FC = () => {
             className="wavoip-input"
           />
           <input
-            type="text"
+            type="password"
             value={newTokenValue}
             onChange={(e) => setNewTokenValue(e.target.value)}
             placeholder="Token Wavoip"
@@ -193,17 +169,8 @@ const WavoipTokenPage: React.FC = () => {
               {tokens.map((token: any) => (
                 <tr key={token.id}>
                   <td>{token.name}</td>
-                  <td style={{ maxWidth: 220, wordBreak: 'break-all', fontSize: 13, color: '#b0b0b0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{visibleTokens[token.id] ? token.token : maskToken(token.token)}</span>
-                      <span 
-                        onClick={() => toggleTokenVisibility(token.id)}
-                        className="wavoip-visibility-icon"
-                        title={visibleTokens[token.id] ? 'Ocultar token' : 'Mostrar token'}
-                      >
-                        {visibleTokens[token.id] ? <VisibilityIcon fontSize="inherit" /> : <VisibilityOffIcon fontSize="inherit" />}
-                      </span>
-                    </div>
+                  <td style={{ maxWidth: 220, fontSize: 13, color: '#b0b0b0' }}>
+                    {token.hasToken ? 'Configurado (write-only)' : 'Não configurado'}
                   </td>
                   <td>
                     {status[token.id] ? (
@@ -253,9 +220,10 @@ const WavoipTokenPage: React.FC = () => {
               <div className="wavoip-modal-field">
                 <label>Token:</label>
                 <input
-                  type="text"
+                  type="password"
                   value={editTokenValue}
                   onChange={(e) => setEditTokenValue(e.target.value)}
+                  placeholder="Deixe em branco para manter o segredo atual"
                   className="wavoip-input"
                 />
               </div>

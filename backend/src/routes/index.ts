@@ -10,6 +10,9 @@ import SettingsController from '../controllers/SettingsController';
 import AuthController from '../controllers/AuthController';
 import CurlExecutorController from '../controllers/CurlExecutorController';
 import dotenv from 'dotenv';
+import requireApiToken from '../middleware/requireApiToken';
+import enforceTenantScope from '../middleware/enforceTenantScope';
+import requireAdminFeature from '../middleware/requireAdminFeature';
 
 dotenv.config();
 
@@ -19,17 +22,22 @@ const handleAsync = (fn: Function) => (req: any, res: any, next: any) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-// User routes
-router.post('/users', UserController.createUser);
-router.get('/users/:id', UserController.getUserById);
-router.put('/users/:id', UserController.updateUser);
-router.delete('/users/:id', UserController.deleteUser);
+// Public authentication probe. All control-plane routes below require Bearer auth.
+router.get('/auth/validate-token', AuthController.validateToken);
+router.use(requireApiToken);
+router.use(enforceTenantScope);
 
-// Tenant routes
-router.post('/tenants', TenantController.createTenant);
-router.get('/tenants/:id', TenantController.getTenantById);
-router.put('/tenants/:id', TenantController.updateTenant);
-router.delete('/tenants/:id', TenantController.deleteTenant);
+// Legacy administration is hidden unless explicitly enabled.
+// LAB/control-plane defaults to false; future multi-tenant admin should move to OIDC/Keycloak roles.
+router.post('/users', requireAdminFeature, UserController.createUser);
+router.get('/users/:id', requireAdminFeature, UserController.getUserById);
+router.put('/users/:id', requireAdminFeature, UserController.updateUser);
+router.delete('/users/:id', requireAdminFeature, UserController.deleteUser);
+
+router.post('/tenants', requireAdminFeature, TenantController.createTenant);
+router.get('/tenants/:id', requireAdminFeature, TenantController.getTenantById);
+router.put('/tenants/:id', requireAdminFeature, TenantController.updateTenant);
+router.delete('/tenants/:id', requireAdminFeature, TenantController.deleteTenant);
 
 // Call routes
 router.post('/calls', CallController.createCall);
@@ -37,6 +45,7 @@ router.get('/calls/:id', CallController.getCallById);
 router.put('/calls/:id', CallController.updateCall);
 router.delete('/calls/:id', CallController.deleteCall);
 router.get('/calls', handleAsync(CallController.listCalls));
+router.post('/calls/:id/preflight', handleAsync(CallController.preflightCall));
 router.post('/calls/:id/execute-test', handleAsync(CallController.executeTestCall));
 
 // CallLog routes
@@ -49,7 +58,9 @@ router.get('/call-logs', handleAsync(CallLogController.listCallLogs));
 // WavoipToken routes
 router.post('/wavoip-tokens', handleAsync(WavoipTokenController.createWavoipToken));
 router.get('/wavoip-tokens/tenant/:tenantId', handleAsync(WavoipTokenController.listWavoipTokensByTenant));
-router.get('/wavoip-tokens/:token/check-availability', handleAsync(WavoipTokenController.checkDeviceAvailability));
+router.get('/wavoip-tokens/:id/availability', handleAsync(WavoipTokenController.checkDeviceAvailabilityById));
+// Legacy token-in-path route: disabled by default, kept only for controlled migration.
+router.get('/wavoip-tokens/:token/check-availability', handleAsync(WavoipTokenController.checkDeviceAvailabilityLegacy));
 router.get('/wavoip-tokens/:id', handleAsync(WavoipTokenController.getWavoipTokenById));
 router.put('/wavoip-tokens/:id', handleAsync(WavoipTokenController.updateWavoipToken));
 router.delete('/wavoip-tokens/:id', handleAsync(WavoipTokenController.deleteWavoipToken));
@@ -72,24 +83,20 @@ router.delete('/elevenlab-tokens/:id', handleAsync(ElevenLabTokenController.dele
 router.get('/elevenlab-tokens', handleAsync(ElevenLabTokenController.listElevenLabTokens));
 router.get('/elevenlab-tokens/:id/agents', handleAsync(ElevenLabTokenController.listAgents));
 router.get('/elevenlab-tokens/:id/phone-numbers', handleAsync(ElevenLabTokenController.listPhoneNumbers));
-router.post('/elevenlab-tokens/:id/outbound-call', handleAsync(ElevenLabTokenController.makeOutboundCall));
 
-// Settings routes - Rotas específicas primeiro
+// Settings routes
 router.post('/settings', handleAsync(SettingsController.createSetting));
 router.get('/settings', handleAsync(SettingsController.listSettings));
 router.get('/settings/tenant/all', handleAsync(SettingsController.getAllSettingsByTenant));
 router.get('/settings/type/:type', handleAsync(SettingsController.getSettingByType));
 router.put('/settings/type/:type', handleAsync(SettingsController.updateSettingByType));
 router.delete('/settings/type/:type', handleAsync(SettingsController.deleteSettingByType));
-// Rotas com parâmetros dinâmicos por último
 router.get('/settings/:id', handleAsync(SettingsController.getSettingById));
 router.put('/settings/:id', handleAsync(SettingsController.updateSetting));
 router.delete('/settings/:id', handleAsync(SettingsController.deleteSetting));
 
-// Curl Executor routes
+// Generic HTTP executor is disabled by default and only works with explicit
+// allowlists when ENABLE_CURL_EXECUTOR=true.
 router.post('/curl-executor', handleAsync(CurlExecutorController.executeCurl));
-
-// Auth routes
-router.get('/auth/validate-token', AuthController.validateToken);
 
 export default router;

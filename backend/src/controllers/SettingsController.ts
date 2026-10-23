@@ -30,7 +30,7 @@ class SettingsController {
     try {
       const { type } = req.params;
       const { tenantId } = req.query;
-      const setting = await SettingsService.getSettingByType(type, Number(tenantId));
+      const setting = await SettingsService.getSettingByType(String(type), Number(tenantId));
       if (!setting) {
         return res.status(404).json({ error: 'Setting not found' });
       }
@@ -55,7 +55,7 @@ class SettingsController {
     try {
       const { type } = req.params;
       const { tenantId, ...data } = req.body;
-      const setting = await SettingsService.updateSettingByType(type, data, Number(tenantId));
+      const setting = await SettingsService.updateSettingByType(String(type), data, Number(tenantId));
       res.json(setting);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
@@ -77,7 +77,7 @@ class SettingsController {
     try {
       const { type } = req.params;
       const { tenantId } = req.query;
-      await SettingsService.deleteSettingByType(type, Number(tenantId));
+      await SettingsService.deleteSettingByType(String(type), Number(tenantId));
       res.sendStatus(204);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });

@@ -1,5 +1,6 @@
 import User from '../models/User';
 import logger from '../utils/logger';
+import { timingSafeEqual } from 'crypto';
 
 class UserService {
   async createUser(data: any, tenantId: number) {
@@ -20,14 +21,15 @@ class UserService {
 
   async verifyToken(token: string): Promise<{ valid: boolean }> {
     try {
-      const secret = process.env.JWT_SECRET;
+      const secret = process.env.CONTROL_PLANE_API_TOKEN;
       if (!secret) {
-        throw new Error('JWT_SECRET is not defined');
+        throw new Error('CONTROL_PLANE_API_TOKEN is not defined');
       }
-      if(token !== secret){
-        throw new Error('Token inválido');
+      const tokenBuffer = Buffer.from(token);
+      const secretBuffer = Buffer.from(secret);
+      if (tokenBuffer.length !== secretBuffer.length || !timingSafeEqual(tokenBuffer, secretBuffer)) {
+        return { valid: false };
       }
-      // jwt.verify(token, secret);
       return { valid: true };
     } catch (error) {
       logger.error('Erro ao verificar token: ' + (error instanceof Error ? error.message : String(error)));

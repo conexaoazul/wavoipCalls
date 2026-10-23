@@ -7,18 +7,13 @@ import WavoipToken from '../models/WavoipToken';
 import CallLogService from './CallLogService';
 import WavoipTokenService from './WavoipTokenService';
 import SettingsService from './SettingsService';
+import ElevenLabsVoiceProvider from './providers/ElevenLabsVoiceProvider';
 import logger from '../utils/logger';
+import { maskPhone, sanitizeLogValue } from '../utils/security';
 
 interface VapiCallResponse {
   id: string;
   status: string;
-}
-
-interface ElevenLabsCallResponse {
-  success: boolean;
-  message: string;
-  conversation_id?: string;
-  sip_call_id?: string;
 }
 
 interface VapiPhoneNumberResponse {
@@ -26,329 +21,443 @@ interface VapiPhoneNumberResponse {
   number: string;
 }
 
+type DispatchResponse =
+  | VapiCallResponse
+  | {
+      provider: string;
+      providerCallId?: string;
+      conversationId?: string;
+      sipCallId?: string;
+      raw: unknown;
+    };
+
 class CallSchedulerService {
+  private dispatchEnabled(): boolean {
+    return process.env.VOICE_DISPATCH_ENABLED === 'true';
+  }
+
+  private preflightEnabled(): boolean {
+    return process.env.VOICE_PREFLIGHT_ENABLED === 'true';
+  }
+
+  private enabledProviders(): Set<string> {
+    return new Set(
+      String(process.env.VOICE_ENABLED_PROVIDERS || '')
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }
+
+  private providerEnabled(provider: 'vapi' | 'elevenlabs'): boolean {
+    return this.enabledProviders().has(provider);
+  }
+
+  private elevenLabsRefAllowed(value: string, envName: 'VOICE_ELEVENLABS_AGENT_ALLOWLIST' | 'VOICE_ELEVENLABS_PHONE_ALLOWLIST'): boolean {
+    const allowed = new Set(
+      String(process.env[envName] || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    );
+    return allowed.size > 0 && allowed.has(value);
+  }
+
   private tenantSchedulers: Record<number, { intervalId: NodeJS.Timeout, currentInterval: number }> = {};
 
+  private includeProviders() {
+    return [
+      { model: VapiToken, as: 'vapiToken', required: false },
+      { model: ElevenLabToken, as: 'elevenLabToken', required: false },
+    ];
+  }
+
+  private async findPendingCalls(tenantId?: number) {
+    const where: any = {
+      scheduleAt: { [Op.lte]: new Date() },
+      executed: false,
+      dispatchState: 'pending',
+    };
+    if (tenantId) where.tenantId = tenantId;
+
+    return Call.findAll({
+      where,
+      include: this.includeProviders(),
+      order: [['scheduleAt', 'ASC'], ['id', 'ASC']],
+    });
+  }
+
   async processScheduledCalls(): Promise<void> {
+    if (!this.dispatchEnabled()) return;
     try {
-      logger.info('Iniciando processamento de chamadas agendadas...');
-      
-      const overdueCalls = await Call.findAll({
-        where: {
-          scheduleAt: {
-            [Op.lte]: new Date()
-          },
-          executed: false
-        },
-        include: [
-          {
-            model: VapiToken,
-            as: 'vapiToken',
-            required: false
-          },
-          {
-            model: ElevenLabToken,
-            as: 'elevenLabToken',
-            required: false
-          }
-        ]
-      });
-
-      logger.info(`Encontradas ${overdueCalls.length} chamadas vencidas`);
-
-      for (const call of overdueCalls) {
-        try {
-          const isValid = await this.validatePhoneNumberAndWavoipToken(call);
-          
-          if (!isValid) {
-            logger.warn(`Chamada ${call.id} não executada - validação falhou`);
-            continue;
-          }
-
-          const response = await this.executeCall(call);
-          
-          // Salvar log do retorno da API
-          await CallLogService.createCallLog({
-            callId: call.id,
-            option: `API Response: ${JSON.stringify(response)}`
-          }, call.tenantId);
-          
-          // Marcar a chamada como executada
-          await call.update({ executed: true });
-          
-          logger.info(`Chamada ${call.id} executada com sucesso`);
-        } catch (error) {
-          logger.error(`Erro ao executar chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
-          
-          // Salvar log do erro
-          await CallLogService.createCallLog({
-            callId: call.id,
-            option: `Error: ${error instanceof Error ? error.message : String(error)}`
-          }, call.tenantId);
-          
-        }
-      }
+      const calls = await this.findPendingCalls();
+      logger.info(`Fila de voz: ${calls.length} chamada(s) pendente(s)`);
+      for (const call of calls) await this.processOne(call);
     } catch (error) {
-      logger.error('Erro no processamento de chamadas agendadas: ' + (error instanceof Error ? error.message : String(error)));
+      logger.error('Erro no processamento da fila de voz: ' + (error instanceof Error ? error.message : String(error)));
     }
+  }
+
+  private async processOne(call: Call): Promise<void> {
+    let claimed = false;
+    try {
+      const isValid = await this.validatePhoneNumberAndWavoipToken(call);
+      if (!isValid) {
+        logger.warn(`Chamada ${call.id} não despachada: validação de provider falhou`);
+        return;
+      }
+
+      claimed = await this.claimForDispatch(call);
+      if (!claimed) {
+        logger.info(`Chamada ${call.id} já foi reivindicada por outro worker`);
+        return;
+      }
+
+      const response = await this.executeCall(call);
+      await this.completeDispatch(call, response);
+
+      await CallLogService.createCallLog({
+        callId: call.id,
+        option: this.responseSummary(response),
+      }, call.tenantId);
+
+      logger.info(`Chamada ${call.id} concluída no provider`);
+    } catch (error) {
+      logger.error(`Erro ao despachar chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (claimed) {
+        await Call.update(
+          { dispatchState: 'unknown' },
+          { where: { id: call.id, tenantId: call.tenantId, dispatchState: 'dispatching' } },
+        );
+
+        await CallLogService.createCallLog({
+          callId: call.id,
+          option: 'dispatch_state=unknown; automatic_retry=false',
+        }, call.tenantId);
+      }
+    }
+  }
+
+  private async claimForDispatch(call: Call): Promise<boolean> {
+    const [updated] = await Call.update(
+      {
+        dispatchState: 'dispatching',
+        dispatchStartedAt: new Date(),
+      },
+      {
+        where: {
+          id: call.id,
+          tenantId: call.tenantId,
+          executed: false,
+          dispatchState: 'pending',
+        },
+      },
+    );
+    return updated === 1;
+  }
+
+  private async completeDispatch(call: Call, response: DispatchResponse): Promise<void> {
+    const normalized = response as any;
+    const raw = normalized.raw || normalized;
+
+    await Call.update(
+      {
+        executed: true,
+        dispatchState: 'completed',
+        providerCallId: normalized.providerCallId || raw.call_id || raw.id || null,
+        conversationId: normalized.conversationId || raw.conversation_id || null,
+        sipCallId: normalized.sipCallId || raw.sip_call_id || null,
+      },
+      {
+        where: {
+          id: call.id,
+          tenantId: call.tenantId,
+          dispatchState: 'dispatching',
+        },
+      },
+    );
+  }
+
+  private responseSummary(response: DispatchResponse): string {
+    const normalized = response as any;
+    const raw = normalized.raw || normalized;
+    const summary = {
+      provider: normalized.provider || (raw.id ? 'vapi' : 'unknown'),
+      providerCallId: normalized.providerCallId || raw.call_id || raw.id || null,
+      conversationId: normalized.conversationId || raw.conversation_id || null,
+      sipCallId: normalized.sipCallId || raw.sip_call_id || null,
+      status: raw.status || null,
+    };
+    return `dispatch_result=${sanitizeLogValue(summary)}`;
   }
 
   private async validatePhoneNumberAndWavoipToken(call: Call): Promise<boolean> {
     try {
-      // Verificar se é uma chamada Vapi ou ElevenLabs
       if (call.vapiTokenId && call.vapiToken) {
+        if (!this.providerEnabled('vapi')) {
+          logger.warn(`Provider Vapi bloqueado por policy para chamada ${call.id}`);
+          return false;
+        }
         return await this.validateVapiCall(call);
-      } else if (call.elevenLabTokenId && call.elevenLabToken) {
-        return await this.validateElevenLabsCall(call);
-      } else {
-        logger.error(`Chamada ${call.id} não possui token válido (Vapi ou ElevenLabs)`);
-        return false;
       }
+      if (call.elevenLabTokenId && call.elevenLabToken) {
+        if (!this.providerEnabled('elevenlabs')) {
+          logger.warn(`Provider ElevenLabs bloqueado por policy para chamada ${call.id}`);
+          return false;
+        }
+        return await this.validateElevenLabsCall(call);
+      }
+
+      logger.error(`Chamada ${call.id} não possui provider válido`);
+      return false;
     } catch (error) {
-      logger.error(`Erro na validação para chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Erro de validação da chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
 
   private async validateVapiCall(call: Call): Promise<boolean> {
     try {
-      const phoneResponse = await axios.get(`https://api.vapi.ai/phone-number/${call.phoneNumberId}`, {
-        headers: {
-          'Authorization': `Bearer ${call.vapiToken!.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const phoneResponse = await axios.get(
+        `https://api.vapi.ai/phone-number/${encodeURIComponent(call.phoneNumberId)}`,
+        {
+          timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
+          headers: {
+            Authorization: `Bearer ${call.vapiToken!.token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
 
       const phoneData: VapiPhoneNumberResponse = phoneResponse.data;
-      logger.info(`Phone number ${call.phoneNumberId}: ${phoneData.number}`);
+      logger.info(`Vapi phone validado para chamada ${call.id}: ${maskPhone(phoneData.number)}`);
 
-      // Buscar todos os WavoipTokens para este número de telefone
       const wavoipTokens = await WavoipToken.findAll({
         where: {
-          name: phoneData.number.replace('+', ''),
-          tenantId: call.tenantId
-        }
+          name: String(phoneData.number || '').replace('+', ''),
+          tenantId: call.tenantId,
+        },
       });
 
       if (wavoipTokens.length === 0) {
-        logger.warn(`Nenhum WavoipToken encontrado para o phone number ${phoneData.number}`);
+        logger.warn(`Nenhuma credencial Wavoip associada ao phone ref da chamada ${call.id}`);
         return false;
       }
 
-      logger.info(`Encontrados ${wavoipTokens.length} WavoipTokens para o número ${phoneData.number}`);
-
-      // Testar cada token até encontrar um disponível
       for (const wavoipToken of wavoipTokens) {
         try {
           const deviceStatus = await WavoipTokenService.isDeviceAvailable(wavoipToken.token);
-          
           if (deviceStatus.available) {
-            logger.info(`WavoipToken disponível encontrado: ${wavoipToken.name} - Token: ${wavoipToken.token}`);
+            logger.info(`Wavoip disponível para chamada ${call.id} credential_id=${wavoipToken.id}`);
             return true;
-          } else {
-            logger.warn(`WavoipToken ${wavoipToken.name} não disponível - Call ID: ${deviceStatus.call?.call_id}`);
           }
+          logger.warn(`Wavoip ocupado para chamada ${call.id} credential_id=${wavoipToken.id}`);
         } catch (error) {
-          logger.error(`Erro ao verificar disponibilidade do WavoipToken ${wavoipToken.name}: ${error instanceof Error ? error.message : String(error)}`);
+          logger.error(`Falha ao verificar Wavoip credential_id=${wavoipToken.id}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
-      logger.warn(`Nenhum WavoipToken disponível encontrado para o phone number ${phoneData.number}`);
       return false;
-
     } catch (error) {
-      logger.error(`Erro na validação do phone number/WavoipToken para chamada Vapi ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Falha ao validar Vapi para chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
 
   private async validateElevenLabsCall(call: Call): Promise<boolean> {
     try {
-      // Para ElevenLabs, vamos verificar se o agent e phone number existem
-      const phoneResponse = await axios.get(`https://api.elevenlabs.io/v1/convai/phone-numbers/${call.phoneNumberId}`, {
-        headers: {
-          'xi-api-key': call.elevenLabToken!.token,
-        }
-      });
+      if (!this.elevenLabsRefAllowed(call.assistantId, 'VOICE_ELEVENLABS_AGENT_ALLOWLIST')) {
+        logger.warn(`ElevenLabs agent ref bloqueado por allowlist para chamada ${call.id}`);
+        return false;
+      }
+      if (!this.elevenLabsRefAllowed(call.phoneNumberId, 'VOICE_ELEVENLABS_PHONE_ALLOWLIST')) {
+        logger.warn(`ElevenLabs phone ref bloqueado por allowlist para chamada ${call.id}`);
+        return false;
+      }
 
-      logger.info(`ElevenLabs phone number ${call.phoneNumberId} validado`);
+      const timeout = Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000);
+      await axios.get(
+        `https://api.elevenlabs.io/v1/convai/phone-numbers/${encodeURIComponent(call.phoneNumberId)}`,
+        {
+          timeout,
+          headers: { 'xi-api-key': call.elevenLabToken!.token },
+        },
+      );
 
-      // Verificar se o agent existe
-      const agentResponse = await axios.get(`https://api.elevenlabs.io/v1/convai/agents/${call.assistantId}`, {
-        headers: {
-          'xi-api-key': call.elevenLabToken!.token,
-        }
-      });
+      await axios.get(
+        `https://api.elevenlabs.io/v1/convai/agents/${encodeURIComponent(call.assistantId)}`,
+        {
+          timeout,
+          headers: { 'xi-api-key': call.elevenLabToken!.token },
+        },
+      );
 
-      logger.info(`ElevenLabs agent ${call.assistantId} validado`);
-
+      logger.info(`ElevenLabs refs validados para chamada ${call.id}`);
       return true;
     } catch (error) {
-      logger.error(`Erro na validação para chamada ElevenLabs ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Falha ao validar ElevenLabs para chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }
 
-  private async executeCall(call: Call): Promise<VapiCallResponse | ElevenLabsCallResponse> {
+  private async executeCall(call: Call): Promise<DispatchResponse> {
     if (call.vapiTokenId && call.vapiToken) {
-      return await this.executeVapiCall(call);
-    } else if (call.elevenLabTokenId && call.elevenLabToken) {
-      return await this.executeElevenLabsCall(call);
-    } else {
-      throw new Error(`Chamada ${call.id} não possui token válido (Vapi ou ElevenLabs)`);
+      return this.executeVapiCall(call);
     }
+    if (call.elevenLabTokenId && call.elevenLabToken) {
+      return this.executeElevenLabsCall(call);
+    }
+    throw new Error(`Chamada ${call.id} não possui provider válido`);
   }
 
   private async executeVapiCall(call: Call): Promise<VapiCallResponse> {
     const payload = {
-      customers: [
-        {
-          number: call.customerNumber
-        }
-      ],
+      customers: [{ number: call.customerNumber }],
       assistantId: call.assistantId,
-      phoneNumberId: call.phoneNumberId
+      phoneNumberId: call.phoneNumberId,
     };
 
-    logger.info(`Tenant ${call.tenantId} Payload da chamada Vapi: ${JSON.stringify(payload)}`);
+    logger.info(`Dispatch Vapi call_id=${call.id} to=${maskPhone(call.customerNumber)}`);
 
     const response = await axios.post('https://api.vapi.ai/call', payload, {
+      timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
       headers: {
-        'Authorization': `Bearer ${call.vapiToken!.token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${call.vapiToken!.token}`,
+        'Content-Type': 'application/json',
+        'X-Request-ID': call.idempotencyKey || `call:${call.tenantId}:${call.id}`,
+      },
     });
 
     return response.data;
   }
 
-  private async executeElevenLabsCall(call: Call): Promise<ElevenLabsCallResponse> {
-    const payload = {
-      agent_id: call.assistantId,
-      agent_phone_number_id: call.phoneNumberId,
-      to_number: call.customerNumber,
-    };
+  private async executeElevenLabsCall(call: Call) {
+    logger.info(`Dispatch ElevenLabs call_id=${call.id} to=${maskPhone(call.customerNumber)}`);
 
-    logger.info(`Tenant ${call.tenantId} Payload da chamada ElevenLabs: ${JSON.stringify(payload)}`);
-
-    const response = await axios.post('https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call', payload, {
-      headers: {
-        'xi-api-key': call.elevenLabToken!.token,
-        'Content-Type': 'application/json'
-      }
+    return ElevenLabsVoiceProvider.startCall({
+      credential: call.elevenLabToken!.token,
+      agentId: call.assistantId,
+      phoneNumberId: call.phoneNumberId,
+      toNumber: call.customerNumber,
+      correlationId: call.idempotencyKey || `call:${call.tenantId}:${call.id}`,
     });
-
-    return response.data;
   }
 
   async startScheduler(initialIntervalSeconds: number = 60, tenantId: number): Promise<void> {
     let currentInterval = initialIntervalSeconds;
-    // Função que executa o ciclo e verifica se precisa reiniciar
+
     const runScheduler = async () => {
-      // Busca o valor mais recente da configuração
       let intervalSeconds = 60;
       try {
         const setting = await SettingsService.getSettingByType('interval', tenantId);
         if (setting && setting.value && !isNaN(Number(setting.value))) {
           intervalSeconds = Number(setting.value);
         }
-      } catch (e) {
+      } catch (error) {
+        logger.warn(`Tenant ${tenantId}: não foi possível ler interval; usando 60s`);
       }
 
       if (this.tenantSchedulers[tenantId] && intervalSeconds !== currentInterval) {
         clearInterval(this.tenantSchedulers[tenantId].intervalId);
         currentInterval = intervalSeconds;
-        logger.info(`Tenant ${tenantId}: Intervalo alterado para ${intervalSeconds} segundos. Reiniciando scheduler.`);
         const intervalId = setInterval(runScheduler, intervalSeconds * 1000);
         this.tenantSchedulers[tenantId] = { intervalId, currentInterval: intervalSeconds };
+        logger.info(`Tenant ${tenantId}: scheduler alterado para ${intervalSeconds}s`);
         return;
       }
+
       await this.processScheduledCallsForTenant(tenantId);
     };
+
     if (this.tenantSchedulers[tenantId]) {
       clearInterval(this.tenantSchedulers[tenantId].intervalId);
     }
-    logger.info(`Tenant ${tenantId}: Iniciando scheduler com intervalo de ${currentInterval} segundos.`);
+
     const intervalId = setInterval(runScheduler, currentInterval * 1000);
     this.tenantSchedulers[tenantId] = { intervalId, currentInterval };
+    logger.info(`Tenant ${tenantId}: scheduler iniciado com ${currentInterval}s`);
     await runScheduler();
   }
 
   async processScheduledCallsForTenant(tenantId: number): Promise<void> {
+    if (!this.dispatchEnabled()) return;
     try {
-      logger.info(`Processando chamadas agendadas para tenant ${tenantId}...`);
-      const overdueCalls = await Call.findAll({
-        where: {
-          scheduleAt: {
-            [Op.lte]: new Date()
-          },
-          executed: false,
-          tenantId: tenantId
-        },
-        include: [
-          {
-            model: VapiToken,
-            as: 'vapiToken',
-            required: false
-          },
-          {
-            model: ElevenLabToken,
-            as: 'elevenLabToken',
-            required: false
-          }
-        ]
-      });
-      logger.info(`Tenant ${tenantId}: Encontradas ${overdueCalls.length} chamadas vencidas`);
-      for (const call of overdueCalls) {
-        try {
-          const isValid = await this.validatePhoneNumberAndWavoipToken(call);
-          if (!isValid) {
-            logger.warn(`Chamada ${call.id} não executada - validação falhou`);
-            continue;
-          }
-          const response = await this.executeCall(call);
-          await CallLogService.createCallLog({
-            callId: call.id,
-            option: `API Response: ${JSON.stringify(response)}`
-          }, call.tenantId);
-          await call.update({ executed: true });
-          logger.info(`Chamada ${call.id} executada com sucesso`);
-        } catch (error) {
-          logger.error(`Erro ao executar chamada ${call.id}: ${error instanceof Error ? error.message : String(error)}`);
-          await CallLogService.createCallLog({
-            callId: call.id,
-            option: `Error: ${error instanceof Error ? error.message : String(error)}`
-          }, call.tenantId);
-        }
-      }
+      const calls = await this.findPendingCalls(tenantId);
+      logger.info(`Tenant ${tenantId}: ${calls.length} chamada(s) pendente(s)`);
+      for (const call of calls) await this.processOne(call);
     } catch (error) {
-      logger.error(`Erro no processamento de chamadas agendadas para tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`Tenant ${tenantId}: erro no scheduler: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  public async executeCallById(callId: number, tenantId: number): Promise<any> {
-    const call = await Call.findOne({ 
+  public async preflightCallById(callId: number, tenantId: number): Promise<unknown> {
+    if (!this.preflightEnabled()) {
+      throw new Error('Voice preflight está desabilitado por feature flag');
+    }
+
+    const call = await Call.findOne({
       where: { id: callId, tenantId },
-      include: [
-        {
-          model: VapiToken,
-          as: 'vapiToken',
-          required: false
-        },
-        {
-          model: ElevenLabToken,
-          as: 'elevenLabToken',
-          required: false
-        }
-      ]
+      include: this.includeProviders(),
     });
     if (!call) throw new Error('Call não encontrada');
+    if (call.executed || call.dispatchState !== 'pending') {
+      throw new Error(`Call não elegível para preflight: state=${call.dispatchState} executed=${call.executed}`);
+    }
+
+    const valid = await this.validatePhoneNumberAndWavoipToken(call);
+    if (!valid) throw new Error('Validação de provider/policy falhou');
+
+    return {
+      ok: true,
+      callId: call.id,
+      provider: call.elevenLabTokenId ? 'elevenlabs' : 'vapi',
+      dispatchState: call.dispatchState,
+      idempotencyKeyPresent: Boolean(call.idempotencyKey),
+      networkDispatchPerformed: false,
+    };
+  }
+
+  public async executeCallById(callId: number, tenantId: number): Promise<unknown> {
+    if (!this.dispatchEnabled()) {
+      throw new Error('Voice dispatch está desabilitado por feature flag');
+    }
+
+    const call = await Call.findOne({
+      where: { id: callId, tenantId },
+      include: this.includeProviders(),
+    });
+    if (!call) throw new Error('Call não encontrada');
+    if (call.executed || call.dispatchState !== 'pending') {
+      throw new Error(`Call não elegível para dispatch: state=${call.dispatchState} executed=${call.executed}`);
+    }
+
     const isValid = await this.validatePhoneNumberAndWavoipToken(call);
-    if (!isValid) throw new Error('Validação de número ou WavoipToken falhou');
-    const response = await this.executeCall(call);
-    await call.update({ executed: true });
-    return response;
+    if (!isValid) throw new Error('Validação de provider falhou');
+
+    const claimed = await this.claimForDispatch(call);
+    if (!claimed) throw new Error('Call já foi reivindicada por outro worker');
+
+    try {
+      const response = await this.executeCall(call);
+      await this.completeDispatch(call, response);
+      await CallLogService.createCallLog({
+        callId: call.id,
+        option: this.responseSummary(response),
+      }, call.tenantId);
+      return response;
+    } catch (error) {
+      await Call.update(
+        { dispatchState: 'unknown' },
+        { where: { id: call.id, tenantId: call.tenantId, dispatchState: 'dispatching' } },
+      );
+      await CallLogService.createCallLog({
+        callId: call.id,
+        option: 'dispatch_state=unknown; automatic_retry=false',
+      }, call.tenantId);
+      throw error;
+    }
   }
 }
 
-export default new CallSchedulerService(); 
+export default new CallSchedulerService();

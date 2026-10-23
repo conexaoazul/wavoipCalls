@@ -29,7 +29,7 @@ const VapiTokenPage: React.FC = () => {
       setLoading(true);
       setErrors({});
       
-      const tokenResponse = await axios.get('/api/vapi-tokens');
+      const tokenResponse = await axios.get('/api/vapi-tokens?tenantId=1');
       setTokens(tokenResponse.data);
 
       const assistantsData: Record<string, any[]> = {};
@@ -96,7 +96,7 @@ const VapiTokenPage: React.FC = () => {
   const openEditModal = (token: any) => {
     setEditingToken(token);
     setEditTokenName(token.name);
-    setEditTokenValue(token.token);
+    setEditTokenValue('');
     setShowEditModal(true);
   };
 
@@ -108,11 +108,11 @@ const VapiTokenPage: React.FC = () => {
   };
 
   const updateToken = async () => {
-    if (editingToken && editTokenName && editTokenValue) {
+    if (editingToken && editTokenName) {
       try {
         await axios.put(`/api/vapi-tokens/${editingToken.id}`, {
           name: editTokenName,
-          token: editTokenValue,
+          ...(editTokenValue.trim() ? { token: editTokenValue.trim() } : {}),
           tenantId: 1
         });
         closeEditModal();
@@ -164,7 +164,7 @@ const VapiTokenPage: React.FC = () => {
             className="wavoip-input"
           />
           <input
-            type="text"
+            type="password"
             value={newToken}
             onChange={(e) => setNewToken(e.target.value)}
             placeholder="Token Vapi"
@@ -239,9 +239,10 @@ const VapiTokenPage: React.FC = () => {
               <div className="wavoip-modal-field">
                 <label>Token:</label>
                 <input
-                  type="text"
+                  type="password"
                   value={editTokenValue}
                   onChange={(e) => setEditTokenValue(e.target.value)}
+                  placeholder="Deixe em branco para manter o segredo atual"
                   className="wavoip-input"
                 />
               </div>

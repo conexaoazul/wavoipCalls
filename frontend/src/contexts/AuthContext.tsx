@@ -19,9 +19,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const validateToken = async (): Promise<boolean> => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
-        console.log('Token não encontrado no localStorage');
         setIsAuthenticated(false);
         return false;
       }
@@ -33,6 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (response.data.valid) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         setIsAuthenticated(true);
         return true;
       } else {
@@ -42,11 +42,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Erro ao validar token:', error);
       if (axios.isAxiosError(error)) {
-        console.error('Detalhes do erro:', {
-          status: error.response?.status,
-          data: error.response?.data,
-          url: error.config?.url
-        });
       }
       setIsAuthenticated(false);
       return false;
@@ -55,25 +50,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (token: string) => {
     try {
-      console.log('Iniciando login...');
-      localStorage.setItem('token', token);
+      sessionStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       const isValid = await validateToken();
       if (!isValid) {
         throw new Error('Token inválido');
       }
-      console.log('Login realizado com sucesso');
     } catch (error) {
       console.error('Erro no login:', error);
-      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       delete axios.defaults.headers.common['Authorization'];
       throw error;
     }
   };
 
   const logout = () => {
-    console.log('Realizando logout...');
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
     setIsAuthenticated(false);
   };

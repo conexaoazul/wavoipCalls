@@ -21,6 +21,7 @@ class VapiTokenService {
 
   async listAssistants(vapiToken: string) {
     const response = await axios.get('https://api.vapi.ai/assistant', {
+      timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
       headers: {
         'Authorization': `Bearer ${vapiToken}`,
       },
@@ -31,6 +32,7 @@ class VapiTokenService {
 
   async listPhoneNumbers(vapiToken: string) {
     const response = await axios.get('https://api.vapi.ai/phone-number', {
+      timeout: Number(process.env.VOICE_PROVIDER_TIMEOUT_MS || 10000),
       headers: {
         'Authorization': `Bearer ${vapiToken}`,
       },
@@ -39,8 +41,8 @@ class VapiTokenService {
     return response.data;
   }
 
-  async getAllVapiTokens() {
-    return VapiToken.findAll();
+  async getVapiTokensByTenant(tenantId: number) {
+    return VapiToken.findAll({ where: { tenantId } });
   }
 }
 
